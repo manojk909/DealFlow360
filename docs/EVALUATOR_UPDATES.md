@@ -496,24 +496,170 @@ naming the decision that blocks it, so it cannot be called by accident.
 
 ### Risks
 
-- The portal is the last MUST-have screen and it is not built. Everything else in the
-  acceptance test flow now works.
-- Recurring billing *schedules* are not built either. We can show that subscription lines
-  are correctly kept off the invoice; we cannot yet show the schedule they bill on.
+- ~~The portal is the last MUST-have screen and it is not built.~~ **Closed at Round 4** —
+  built, and all eight acceptance criteria now pass.
+- Recurring billing *schedules* are still not built. We can show that subscription lines are
+  correctly kept off the invoice; we cannot yet show the schedule they bill on. This is the
+  one half-present feature and it is named as such in `docs/NEXT.md`.
 - The split is per line, so on a multi-line order it can suggest more shipments than a
   global optimiser would. Documented, tested, and named on the screen rather than hidden.
 
 ---
 
-## Round 4 — *(to be filled in)*
+## Round 4 — Both flows complete, and all eight criteria pass
 
-**What landed since last round:**
+*Logged 05 Sep 2026*
 
-**Currently building:**
+**The application is feature-complete against every MUST in the problem statement, and all
+eight acceptance criteria pass.** We ran them in one continuous sitting against a database
+rebuilt from nothing, driving the real screens over HTTP — 44 individual checks, no
+failures.
 
-**Blocked on / open decisions:**
+Since Round 3: the customer portal, the negotiation loop, the upsell panel, signup, the
+acceptance gate, a validation and offline pass, and the two closing deliverables.
 
-**Risks:**
+---
+
+### The customer portal, and why it is a separate application
+
+The problem statement is specific that the customer-facing screen must be a genuinely
+separate, restricted view and not an internal screen with a different label. So it is a
+separate Django app, on its own URL prefix, with its own base template and a **light**
+theme that shares no chrome at all with the dark internal workspace. A customer should
+never wonder whether they are looking at somebody's back office.
+
+Access is a signed token in the link, and nothing else. There is no customer account, no
+password and no email. The token resolves to exactly one quotation, and we check that twice
+on purpose: the signature already binds it to one id, and the quotation must also still hold
+that exact token, so a link that was rotated or never issued is refused as well.
+
+Every way of arriving without the right token — missing, malformed, tampered, unknown, or a
+token the quotation does not hold — returns the **same** 403. One response for all of them,
+because telling the difference between "bad signature" and "no such quotation" would tell
+somebody which quotation ids exist. Never the quotation, and never a redirect to our
+internal login.
+
+Two things we test that are easy to leave untested: the portal code contains neither
+`request.user` nor `login_required` anywhere in its executable body, and an authenticated
+superuser gets **no** special treatment — the portal is scoped by token, not by permission.
+
+What the customer sees is deliberately not an admin table. Lines are readable blocks with the
+discount called out. The conversation is rendered as a conversation — their messages on one
+side, the account manager's on the other, each with an author and a time — and it is
+append-only, because a negotiation history that can be rewritten is not a history. They never
+see an internal approval stage: while a request is with us, the page says exactly that.
+
+---
+
+### The moment the product exists for
+
+A customer, with no account, opens their link, comments on a line, and proposes a different
+discount. The quotation re-scores and **re-enters the approval chain by itself**, with fresh
+approver steps. Nobody asked it to.
+
+One detail in there is load-bearing and we got it right deliberately, because getting it
+wrong would have broken the walkthrough in a way that looks like the product not working.
+**A counter-discount replaces the line's discount. It does not stack on top of it.** Beta
+Industries is a Silver customer with a 10% ceiling and their service line already carries 8%.
+A 15% counter must leave it at 15% — five points over, which routes to the Sales Manager
+alone. Stacking would have compounded 8% and 15% into roughly 21.8%, pulled Finance into the
+chain, and left the demo waiting for an approval that was never going to appear on screen.
+
+We also refuse to let the customer confirm while an approval is outstanding, and the page
+tells them why without naming an internal stage.
+
+---
+
+### The upsell panel, and a mistake worth telling you about
+
+Ranked from co-purchase history with promoted products given a 50% boost, showing the margin
+change each suggestion would produce. It lives **inside** the live region of the builder, so
+accepting one updates the lines, the order total, the margin indicator and the remaining
+suggestions in a single exchange — no page reload. On the demo order the total moves from
+7740.60 to 8196.60 and the new margin comes back in that same response.
+
+The mistake: we first applied the minimum-margin threshold to the margin the *order* would be
+left with. That does nothing. On a quotation dominated by a six-unit laptop line, adding a
+€100 cable with a 1% margin barely moves the total and sailed straight through — which is
+exactly the case the rule exists to stop. The threshold is about the **suggested product's
+own** margin. Our tests caught it, we corrected it, and the reasoning is written beside the
+check so nobody re-introduces it.
+
+---
+
+### Signup, and a decision we thought was worth making carefully
+
+The acceptance test opens with "sign up or log in", and we had no signup page. Now we do,
+and it creates a **Sales Rep** — nothing else.
+
+There is no role dropdown, and `role` is not in the form's field list, so a crafted request
+carrying `role=MANAGER` has nothing to bind to. The save then sets the role explicitly rather
+than relying on a model default, so the guarantee does not quietly depend on a default
+somebody could change later for an unrelated reason. Manager, Finance and Admin are granted
+by an administrator.
+
+We want to be clear this is a design decision and not an omission, because the alternative is
+worse than a security weakness. This is a product whose entire thesis is that discounts are
+governed by somebody other than the person giving them away. A signup form with a role
+dropdown would let anyone grant themselves approval rights — and a judge who typed MANAGER
+into that box would have disproved the demo in ten seconds. It is written up as ADR-012.
+
+---
+
+### The gate: eight criteria, 44 checks, one pass
+
+`scripts/ac_gate.py` runs all eight acceptance criteria in sequence against a freshly seeded
+database. The observed result for each is recorded in `docs/ACCEPTANCE.md` rather than
+summarised as a tick.
+
+| # | Criterion | Result |
+|---|---|---|
+| AC-1 | Sign up, then set up a tier, a warehouse and a plan | **PASS** — Platinum, North Hub and Gate Monthly created through the admin and still there on reload |
+| AC-2 | A line discounted beyond what is allowed | **PASS** — saves at 18% and shows `OVER +8 pt` as it is typed |
+| AC-3 | Confirm; it asks for approval automatically | **PASS** — `PENDING_APPROVAL`, score 8.00, Manager then Finance generated by the system; a rep posting at the approval endpoint gets 403 |
+| AC-4 | Accept an upsell; total and margin update right away | **PASS** — 7740.60 → 8196.60 in a partial, no page reload |
+| AC-5 | Fulfilment splits across warehouses | **PASS** — 4 from Main, 2 from East, cost 6.80; the service line named as skipped, not backordered |
+| AC-6 | One-time and recurring billed separately | **PASS** — 7740.60 invoiced, 456.00 excluded |
+| AC-7 | Customer requests a bigger discount | **PASS** — replaced 8% with 15%, re-scored to 5.00, back to approval on its own with a Manager step only |
+| AC-8 | Record a payment; status updates | **PASS** — overpayment refused with no payment row; PARTIAL then PAID |
+
+Three caveats we would rather say than have found. The pass is automated, so it proves values
+and not appearance — that is what the rehearsal is for. AC-6 proves the separation is real but
+the recurring *schedule* is not built. And AC-1 was satisfied through Django admin, which is
+the backend configuration area by design, not a shortcut.
+
+---
+
+### Two things Odoo scores regardless of features
+
+**The demo no longer depends on the venue wifi.** Tailwind and HTMX were CDN script tags; they
+are now files in our own static directory, and a test fails if any template ever reaches for a
+CDN again. The whole application runs with the network unplugged.
+
+**Validation and layout.** Eleven tests push bad input through the real endpoints — a discount
+of 150 and of "twelve", a zero quantity, a blank approval reason, an override beyond available
+stock, an overpayment, a portal counter of 250 — and assert a visible message, never a 500,
+and nothing written. Layout is checked as containment: every wide table scrolls inside its own
+container rather than the page, no fixed width exceeds a 375-pixel viewport, and four real
+overflow risks were fixed. That is a mechanical check, not a rendered one, and we say so.
+
+---
+
+### Status at this round
+
+**Working:** every MUST feature. Configuration, quotation building with a live margin and
+per-line ceiling checks, automatic approval routing with a full audit trail, the warehouse
+split, invoicing and payment, the customer portal with the automatic re-approval loop, the
+upsell panel, and signup. **170 tests, all passing.**
+
+**Deliverables:** the one-page architecture diagram (`docs/architecture.html`, self-contained,
+opens with no network) and the what-we-would-build-next note (`docs/NEXT.md`).
+
+**Not built, and labelled as such in the product itself:** recurring billing schedules, the
+deal health dashboard, and reporting. The workspace greys those tabs out and names the task
+behind each rather than hiding them.
+
+**Next:** rehearse and record the five-minute demo.
 
 ---
 
@@ -616,6 +762,29 @@ worth showing without it. Fulfilment, billing and the portal follow. The deal he
 dashboard and reporting are last on purpose: they are the two things we would cut first if
 we run out of hours, and putting them last means running out of hours cuts them
 automatically rather than by panic.
+
+### Can someone sign themselves up as a manager and approve their own discounts?
+
+No, and it is worth explaining why rather than just saying no. Self-signup creates a Sales
+Rep and nothing else. There is no role dropdown on the form, and the role field is not in the
+form's field list at all, so a crafted request carrying `role=MANAGER` has nothing to bind to
+— it is not filtered out afterwards, it never had anywhere to land. The save then sets the
+role explicitly rather than trusting a model default. Manager, Finance and Admin are granted
+by an administrator through the backend. We made this decision deliberately and wrote it up
+as ADR-012, because the alternative is worse than a security weakness: this is a product
+whose whole thesis is that discounts are governed by somebody other than the person giving
+them away, and a role dropdown would let a visitor disprove that in ten seconds. There is a
+test that a signup attempting to be a manager still lands as a rep and still gets a 403 from
+the approvals screen.
+
+### Does the demo need the internet?
+
+No. It did until Round 4 — Tailwind and HTMX were CDN script tags — and now they are files in
+our own static directory, served by Django. There is a test that fails if any template ever
+references a CDN again, or any absolute http asset URL. The database is a single local file,
+no email is sent, and there is no external integration of any kind. The whole application
+runs with the network unplugged, which is what Odoo's guidance about planning for offline
+operation actually asks for.
 
 ### Did you use AI?
 
