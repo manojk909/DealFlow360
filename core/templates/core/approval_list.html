@@ -11,7 +11,7 @@
   {% for row in rows %}
     <a href="{% url 'core:approval_detail' row.quotation.pk %}"
        class="flex flex-wrap items-center gap-4 rounded-lg border border-slate-800 bg-slate-900 p-4 no-underline hover:border-amber-700">
-      <div class="min-w-48">
+      <div class="w-full min-w-0 sm:w-auto sm:min-w-48">
         <div class="font-medium text-slate-100">{{ row.quotation.customer.name }}</div>
         <div class="text-xs text-slate-500">{{ row.quotation.number }} &middot; {{ row.quotation.customer.tier.name }} &middot; {{ row.quotation.rep.name }}</div>
       </div>

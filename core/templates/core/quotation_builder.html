@@ -27,7 +27,7 @@
     </span>
   </div>
 
-  <div class="mt-6 grid gap-5 lg:grid-cols-[260px_1fr]">
+  <div class="mt-6 grid min-w-0 gap-5 lg:grid-cols-[260px_1fr]">
 
     <aside class="space-y-4">
       <h2 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Add a product</h2>
@@ -66,7 +66,7 @@
           <p class="mt-2 text-xs text-slate-500">
             One link, one quotation. Anything else returns 403.
           </p>
-          <div class="mt-2 flex gap-1">
+          <div class="mt-2 flex min-w-0 gap-1">
             <input id="portal-link" type="text" readonly value="{{ portal_url }}"
                    class="w-full truncate rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-300">
             <button type="button" id="copy-portal-link"

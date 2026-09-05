@@ -6,8 +6,14 @@
   <title>{% block title %}DealFlow360{% endblock %}</title>
 
   {# ADR-001: Tailwind and HTMX by CDN — no Node toolchain, no build step. #}
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  {% comment %}
+    Tailwind and HTMX are served from our own static/ directory, not a CDN. T-26 and
+    Odoo's guidance to plan for offline operation: the demo must not depend on venue wifi.
+    ADR-001 chose CDN tags for speed of setup; vendoring them costs two files and removes
+    the only network dependency the application had.
+  {% endcomment %}
+  <script src="{% static 'vendor/tailwind.js' %}"></script>
+  <script src="{% static 'vendor/htmx.min.js' %}" defer></script>
 
   {% comment %} Minimal fallback so the app is still legible if the CDN is unreachable.
      Odoo's guidance is to plan for offline operation; see the note in tasks/BACKLOG.md. {% endcomment %}

@@ -14,7 +14,7 @@
 
 <div class="mt-6 flex gap-4 overflow-x-auto pb-4">
   {% for column in columns %}
-    <section class="w-72 shrink-0">
+    <section class="w-[17rem] max-w-[85vw] shrink-0">
       <header class="flex items-center justify-between rounded-t-lg border border-slate-800 bg-slate-900 px-3 py-2">
         <h2 class="text-xs font-semibold uppercase tracking-wide text-slate-300">{{ column.label }}</h2>
         <span class="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-400">{{ column.quotations|length }}</span>

@@ -12,6 +12,9 @@ db.sqlite3-journal
 # Environment
 .env
 
+# Vendored front-end assets ARE committed on purpose (T-26): the demo must not
+# depend on venue wifi. Do not add core/static/vendor/ here.
+
 # Editors / OS
 .vscode/
 .idea/
