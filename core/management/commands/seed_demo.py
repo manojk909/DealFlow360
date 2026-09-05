@@ -569,6 +569,48 @@ class Command(BaseCommand):
 
         return made
 
+    def _route_for_approval(self, quotation, rep):
+        """Give a pending quotation the chain its own score demands.
+
+        Uses `approval.required_levels()` rather than inventing steps, so a seeded
+        quotation is routed by exactly the rule a live submit would apply.
+        """
+        from core.services import approval as approval_service
+
+        if quotation.approval_steps.exists():
+            return quotation
+
+        requires_manager, requires_finance = approval_service.required_levels(
+            quotation.risk_score
+        )
+        sequence = 0
+        levels = []
+        if requires_manager:
+            sequence += 1
+            ApprovalStep.objects.create(
+                quotation=quotation, sequence=sequence, level=ApprovalStep.Level.MANAGER
+            )
+            levels.append("MANAGER")
+        if requires_finance:
+            sequence += 1
+            ApprovalStep.objects.create(
+                quotation=quotation, sequence=sequence, level=ApprovalStep.Level.FINANCE
+            )
+            levels.append("FINANCE")
+
+        AuditLog.objects.create(
+            quotation=quotation,
+            actor=rep,
+            action="SUBMITTED_FOR_APPROVAL",
+            reason=(
+                f"Automatic: blended risk score {quotation.risk_score} routed to "
+                + " then ".join(levels)
+                + "."
+            ),
+            payload={"risk_score": str(quotation.risk_score), "steps": levels},
+        )
+        return quotation
+
     def _seed_history(self, users, customers, products):
         """Volume and history, so the analytics screens have something true to say.
 
@@ -633,7 +675,12 @@ class Command(BaseCommand):
              [(monitor, 5, "9.00"), (care, 2, "4.00")], 9),
         ]
         for number, customer, owner, stage, lines, idle in spec:
-            self._build(number, customer, owner, stage, lines, days_idle=idle)
+            quotation = self._build(number, customer, owner, stage, lines, days_idle=idle)
+            # A quotation sitting in PENDING_APPROVAL with no ApprovalStep looks broken in
+            # the queue — no chain, nothing waiting on anyone. Route these through the real
+            # service so the chain is the one the score actually demands.
+            if stage == Quotation.Stage.PENDING_APPROVAL:
+                self._route_for_approval(quotation, owner)
 
         # Sara's baseline: eight quiet deals at 2-4%, so her average is genuinely low.
         for index in range(8):
@@ -647,9 +694,12 @@ class Command(BaseCommand):
             )
 
         # ...and the one that breaks the pattern. This is the anomaly the dashboard finds.
-        self._build(
-            "Q-2026-0130", harbour, sara, Quotation.Stage.PENDING_APPROVAL,
-            [(laptop, 2, "34.00"), (monitor, 2, "4.00")], days_idle=1,
+        self._route_for_approval(
+            self._build(
+                "Q-2026-0130", harbour, sara, Quotation.Stage.PENDING_APPROVAL,
+                [(laptop, 2, "34.00"), (monitor, 2, "4.00")], days_idle=1,
+            ),
+            sara,
         )
 
         # A hybrid order with a live billing schedule, so B7 is populated on arrival.

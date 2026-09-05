@@ -903,3 +903,62 @@ previously looked like new business in every report.
 **Still not built:** amending the *plan* rather than the quantity (monthly to annual), and
 amending several assets in one quotation. Both are recorded in NEXT.md.
 
+---
+
+## ADR-016 — Solving for the approvable discount
+
+**Status:** Accepted
+**Date:** 2026-09-06
+
+**Context.** The approval screen answers *why* a quotation was flagged: discount given,
+limit allowed, points over, per line. That is already more than the commercial products
+show. But it does not answer the question the approver actually has, which is **"so what
+would make this approvable?"** — and every approver answers it anyway, on paper, by
+guessing a number and asking the rep to try again.
+
+A competitor review confirmed the gap is industry-wide. Salesforce Revenue Cloud, Odoo,
+Conga and PROS all *judge* a discount against a guardrail. None of them solve for the
+discount that would clear one.
+
+**Decision.** **Invert the scoring function and show the answer.**
+
+The blended score is `Σ max(0, given − allowed)` and `given` compounds the order discount
+multiplicatively, so both are invertible in closed form. For a line and a target band:
+
+```
+spent_by_others = score − this_line.over_by
+headroom        = target_score − spent_by_others
+max_given       = allowed + max(0, headroom)
+max_line_disc   = 100 × (1 − (1 − max_given/100) / (1 − order_disc/100))
+```
+
+* Bands come from `ApprovalChainRule`, so reconfiguring the chain in the back-end changes
+  the suggestions with it. Nothing is hard-coded.
+* **Rounding is always down.** A suggestion that rounds up by a hundredth is a suggestion
+  that gets rejected on submit, which is worse than offering none.
+* A band can be **unreachable**: if the other lines have already spent the target, no
+  discount on this line — not even zero — brings the quotation back. The screen says so
+  rather than offering a number that would not work.
+* One button returns the quotation to the rep **with the figure written into the reason**,
+  through the existing return-for-revision path. The rep gets a target instead of "too
+  high, try again", and the number lands in the audit trail like every other decision.
+
+**Reason.** It is the product's own thesis carried one step further. Everything else here
+says *the system governs itself*; this says the system will also tell you the deal that
+works. And it costs almost nothing: the arithmetic is an inversion of a function that
+already exists and is already tested, so the suggestion and the verdict are computed from
+the same source and cannot disagree.
+
+The tests do not check the algebra in the abstract. They take the suggested number, write
+it onto the line, re-score through the ordinary path, and assert the band actually moved —
+plus a test that one hundredth *above* the suggestion does **not** clear, which is what
+makes it a maximum rather than merely a safe guess.
+
+**Consequences.** `risk.py` gains three read-only functions and no state. Because the score
+is blended, a line's allowance depends on what the other lines have spent, so the
+suggestion is recomputed per line against the live quotation rather than cached.
+
+**Also fixed here.** Seeded quotations in PENDING_APPROVAL carried no `ApprovalStep`, so
+the approvals queue showed rows with no chain and nothing waiting on anyone. They are now
+routed through `approval.required_levels()` — the same rule a live submit applies.
+

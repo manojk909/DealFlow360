@@ -25,7 +25,7 @@ number 8.
 """
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 
 CENTS = Decimal("0.01")
 ONE = Decimal("1")
@@ -187,3 +187,151 @@ def score_for_quotation(quotation):
         category_ceilings=ceilings,
         order_discount_pct=quotation.order_discount_pct,
     )
+
+
+# ------------------------------------------------- ADR-016: solving for the approvable discount
+
+
+def _line_discount_for_given(given_pct, order_discount_pct):
+    """Invert `_given_pct`: the line discount that produces `given_pct` after compounding.
+
+    `given = 100(1 - (1 - l/100)(1 - o/100))`, so
+    `l = 100(1 - (1 - given/100) / (1 - o/100))`.
+
+    An order discount of 100% leaves the line with no influence at all, so there is no
+    line discount to solve for and `None` says so rather than dividing by zero.
+    """
+    order_factor = ONE - (Decimal(order_discount_pct) / HUNDRED)
+    if order_factor <= 0:
+        return None
+    line_factor = (ONE - (Decimal(given_pct) / HUNDRED)) / order_factor
+    return (HUNDRED * (ONE - line_factor)).quantize(CENTS, rounding=ROUND_DOWN)
+
+
+def headroom_for_line(result, line_id, target_score, order_discount_pct=Decimal("0")):
+    """The largest discount this line can carry while the quotation stays at or under
+    `target_score`.
+
+    The blended score is a **sum** of per-line overages, so a line's allowance depends on
+    what every other line has already spent. That is the whole point of blending, and it
+    is why this cannot be answered per line in isolation: three lines each 3 points over
+    leave no room for a fourth even though none of them looks alarming alone.
+
+    Returns:
+        dict with `reachable`, `max_discount_pct` and `spent_by_others`. `reachable` is
+        False when the other lines have already exhausted the target on their own — no
+        discount on this line, not even zero, can bring the quotation back.
+
+    Rounding is **down**, always. A suggestion that rounds up by a hundredth is a
+    suggestion that gets rejected on submit, which is worse than no suggestion.
+    """
+    this_line = next((row for row in result.breakdown if row.line_id == line_id), None)
+    if this_line is None:
+        return {"reachable": False, "max_discount_pct": None, "spent_by_others": None}
+
+    spent_by_others = (result.score - this_line.over_by_pct).quantize(CENTS)
+    headroom = Decimal(target_score) - spent_by_others
+
+    if headroom < 0:
+        # Even at nothing, the rest of the quotation is already past the target.
+        return {
+            "reachable": False,
+            "max_discount_pct": None,
+            "spent_by_others": spent_by_others,
+        }
+
+    max_given = this_line.allowed_pct + headroom
+    max_line = _line_discount_for_given(min(max_given, HUNDRED), order_discount_pct)
+    if max_line is None:
+        return {"reachable": False, "max_discount_pct": None, "spent_by_others": spent_by_others}
+
+    return {
+        "reachable": True,
+        "max_discount_pct": max(Decimal("0.00"), max_line),
+        "spent_by_others": spent_by_others,
+    }
+
+
+def approval_bands():
+    """The chain's bands, cheapest first, as (label, ceiling score, rule).
+
+    Read from `ApprovalChainRule` rather than hard-coded, so a chain reconfigured in the
+    back-end changes the suggestions too. A band whose `score_max` is unbounded in
+    practice is still a real band; it simply never constrains anything.
+    """
+    from core.models import ApprovalChainRule
+
+    bands = []
+    for rule in ApprovalChainRule.objects.order_by("score_min"):
+        if rule.requires_finance:
+            label = "Sales Manager, then Finance"
+        elif rule.requires_manager:
+            label = "Sales Manager only"
+        else:
+            label = "Auto-approved"
+        bands.append({"label": label, "ceiling": rule.score_max, "rule": rule})
+    return bands
+
+
+def what_would_clear_this(quotation):
+    """For a flagged quotation: the discount on each over-ceiling line that would move the
+    whole quotation into a cheaper approval band.
+
+    This is the question an approver actually has. The screen already answers *why* a quote
+    was flagged; without this it never answers *what would make it approvable*, and the
+    manager is left doing the arithmetic on paper — which is exactly the manual step the
+    product claims to remove.
+
+    Reads only. Suggests; never applies.
+
+    Returns:
+        list of dicts, worst line first, each carrying the line, what it costs today, and
+        the discount that would reach each cheaper band.
+    """
+    result = score_for_quotation(quotation)
+    if not result.flagged:
+        return []
+
+    bands = approval_bands()
+    current = next(
+        (
+            band
+            for band in bands
+            if band["rule"].score_min <= result.score <= band["rule"].score_max
+        ),
+        None,
+    )
+    cheaper = [
+        band
+        for band in bands
+        if current is None or band["rule"].score_min < current["rule"].score_min
+    ]
+
+    lines = {line.pk: line for line in quotation.lines.select_related("product")}
+    suggestions = []
+    for row in sorted(result.breakdown, key=lambda r: r.over_by_pct, reverse=True):
+        if row.over_by_pct <= 0:
+            continue
+        targets = []
+        for band in cheaper:
+            headroom = headroom_for_line(
+                result, row.line_id, band["ceiling"], quotation.order_discount_pct
+            )
+            if headroom["reachable"]:
+                targets.append(
+                    {
+                        "label": band["label"],
+                        "max_discount_pct": headroom["max_discount_pct"],
+                        "spent_by_others": headroom["spent_by_others"],
+                    }
+                )
+        suggestions.append(
+            {
+                "line": lines.get(row.line_id),
+                "risk": row,
+                "targets": targets,
+                # The cheapest band this line alone can reach, which is what the button offers.
+                "best": targets[0] if targets else None,
+            }
+        )
+    return suggestions

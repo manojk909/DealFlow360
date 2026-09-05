@@ -599,6 +599,8 @@ def approval_detail(request, pk):
     steps = list(quotation.approval_steps.select_related("actor").order_by("sequence"))
     waiting = next((s for s in steps if s.status == ApprovalStep.Status.PENDING), None)
 
+    # ADR-016. The screen already says why this was flagged. This says what would clear it.
+    clearing = risk.what_would_clear_this(quotation)
     actionable = waiting is not None and request.user.role in (
         {Role.MANAGER, Role.ADMIN} if waiting.level == ApprovalStep.Level.MANAGER
         else {Role.FINANCE, Role.ADMIN}
@@ -615,6 +617,7 @@ def approval_detail(request, pk):
             "steps": steps,
             "waiting_on": waiting,
             "actionable": actionable,
+            "clearing": clearing,
             "audit": quotation.audit_log.select_related("actor").order_by("created_at"),
             "error": request.GET.get("error"),
         },
@@ -636,6 +639,22 @@ def approval_act(request, pk):
     )
     action = request.POST.get("action")
     reason = request.POST.get("reason", "")
+
+    # ADR-016. Returning with a suggested figure is the ordinary return path plus the
+    # number in the reason, so the rep gets a target instead of "too high, try again" —
+    # and the figure lands in the audit trail like every other decision.
+    suggested = request.POST.get("suggested_discount_pct")
+    suggested_line = request.POST.get("suggested_line")
+    if action == "return" and suggested and suggested_line:
+        line = quotation.lines.filter(pk=suggested_line).select_related("product").first()
+        if line is not None:
+            reason = (
+                f"{reason.strip()} " if reason.strip() else ""
+            ) + (
+                f"Suggested: bring {line.product.name} to {suggested}% "
+                f"(currently {line.discount_pct}%), which is the most this quotation can "
+                f"carry on that line and still clear."
+            )
 
     handlers = {
         "approve": approval.approve,

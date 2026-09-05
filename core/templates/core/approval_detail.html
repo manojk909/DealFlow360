@@ -96,6 +96,72 @@
   </span>
 </div>
 
+{% if clearing %}
+  {% comment %} ADR-016. Every CPQ tells an approver a discount is too high. This one solves
+     for the discount that is not — from the same scoring function the flag came from, so
+     the suggestion and the verdict can never disagree. {% endcomment %}
+  <section class="mt-8 rounded-xl border border-sky-900/60 bg-sky-950/20 p-4">
+    <h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-sky-300">
+      <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 18h6"/><path d="M10 22h4"/>
+        <path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>
+      </svg>
+      What would clear this
+    </h2>
+    <p class="mt-1 text-xs text-slate-400">
+      The largest discount each line can carry and still reach a cheaper approval band.
+      Because the score is blended, a line&rsquo;s allowance depends on what the others
+      have already spent &mdash; these numbers account for that.
+    </p>
+
+    <div class="mt-3 space-y-3">
+      {% for row in clearing %}
+        <div class="rounded-lg border border-slate-800 bg-slate-900 p-3">
+          <div class="flex flex-wrap items-baseline justify-between gap-2">
+            <span class="font-medium text-slate-100">{{ row.line.product.name }}</span>
+            <span class="text-xs text-slate-500">
+              given <span class="tabular-nums text-rose-400">{{ row.risk.given_pct|floatformat:2 }}%</span>
+              &middot; allowed <span class="tabular-nums">{{ row.risk.allowed_pct|floatformat:2 }}%</span>
+              &middot; over by <span class="tabular-nums text-rose-400">{{ row.risk.over_by_pct|floatformat:2 }}</span>
+            </span>
+          </div>
+
+          {% if row.targets %}
+            <div class="mt-2 flex flex-wrap gap-2">
+              {% for target in row.targets %}
+                <span class="rounded-lg border border-emerald-900/50 bg-emerald-950/30 px-2.5 py-1.5 text-xs">
+                  <span class="font-semibold tabular-nums text-emerald-300">{{ target.max_discount_pct|floatformat:2 }}%</span>
+                  <span class="text-slate-400">&rarr; {{ target.label }}</span>
+                </span>
+              {% endfor %}
+            </div>
+            {% if actionable %}
+              <form method="post" action="{% url 'core:approval_act' quotation.pk %}" class="mt-3">
+                {% csrf_token %}
+                <input type="hidden" name="step_id" value="{{ waiting_on.pk }}">
+                <input type="hidden" name="action" value="return">
+                <input type="hidden" name="suggested_line" value="{{ row.line.pk }}">
+                <input type="hidden" name="suggested_discount_pct" value="{{ row.best.max_discount_pct|floatformat:2 }}">
+                <input type="hidden" name="reason" value="Returned with a suggested discount.">
+                <button type="submit"
+                        class="rounded bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-500">
+                  Return to rep at {{ row.best.max_discount_pct|floatformat:2 }}%
+                </button>
+              </form>
+            {% endif %}
+          {% else %}
+            <p class="mt-2 text-xs text-amber-300/80">
+              No discount on this line reaches a cheaper band &mdash; the other lines have
+              already spent the allowance ({{ row.risk.over_by_pct|floatformat:2 }} of the
+              score is this line, the rest is elsewhere).
+            </p>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
+
 {% if actionable %}
   <h2 class="mt-8 text-sm font-semibold uppercase tracking-wide text-slate-300">
     Your decision &mdash; {{ waiting_on.get_level_display }}
