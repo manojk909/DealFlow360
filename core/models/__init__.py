@@ -12,6 +12,8 @@ from core.models.billing import (
     Payment,
     SubscriptionPlan,
 )
+from core.models.assets import Asset
+from core.models.config import SalesSetting
 from core.models.catalogue import (
     Category,
     PriceListEntry,
@@ -37,6 +39,10 @@ __all__ = [
     "User",
     "CustomerTier",
     "Customer",
+    # configuration (ADR-007)
+    "SalesSetting",
+    # assets (ADR-013)
+    "Asset",
     # catalogue
     "Category",
     "Product",

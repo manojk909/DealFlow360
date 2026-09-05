@@ -1,4 +1,5 @@
 {% extends "core/workspace_base.html" %}
+{% load money %}
 {% block title %}Approvals &middot; DealFlow360{% endblock %}
 
 {% block content %}
@@ -15,7 +16,7 @@
         <div class="font-medium text-slate-100">{{ row.quotation.customer.name }}</div>
         <div class="text-xs text-slate-500">{{ row.quotation.number }} &middot; {{ row.quotation.customer.tier.name }} &middot; {{ row.quotation.rep.name }}</div>
       </div>
-      <div class="tabular-nums text-slate-200">&euro;{{ row.quotation.total|floatformat:2 }}</div>
+      <div class="tabular-nums text-slate-200">{{ row.quotation.total|money }}</div>
       <div class="rounded bg-rose-950 px-2 py-1 text-xs font-semibold text-rose-300">risk {{ row.quotation.risk_score }}</div>
       <div class="flex items-center gap-1 text-xs">
         {% for step in row.steps %}

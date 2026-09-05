@@ -1,95 +1,188 @@
 """
-Deal health and anomaly detection — BR-8.
+Deal health and anomaly detection — BR-8. Implements FR-33 (B9). Owned by **T-21**.
 
-Implements FR-33 (B9). Owned by **T-21**.
+**ADR-007 is closed.** The three thresholds the PDF leaves open now live on the
+`SalesSetting` row rather than in this module, because the PDF calls them "configured".
+Change the row in the back-end and every detector below moves with it.
 
-**ADR-007 is still open**, deliberately. The PDF says stalled deals are those "inactive
-for more than a configured number of days" without giving a default, and defines a
-discount anomaly as one "well above a rep's historical average" without quantifying "well
-above". Delivery promise slippage is listed with no promise date defined anywhere in the
-data model.
+* **Stalled** — no activity for more than `stall_days`, and still in an open stage.
+* **Anomaly** — a line discounted more than `anomaly_threshold_pct` points above the
+  rep's own mean discount over the last `anomaly_window_days`. Measured against the rep's
+  own history, per the PDF's wording, not against a company-wide number.
+* **Slippage** — a confirmed order past `promised_delivery_date` that has not shipped.
+  The promise is set at confirmation (`delivery_promise_days`); orders confirmed before
+  that field existed have none and are skipped rather than guessed at.
 
-What that means for this module:
-
-* `stalled_deals()` can be implemented as soon as a stall window is configured — the
-  detection itself is unambiguous, only the threshold is open.
-* `discount_anomalies()` must not be implemented until ADR-007 fixes both the threshold
-  and how a rep's historical average is computed — over what window, and which
-  quotations count.
-* `delivery_slippage()` has no data to read: there is no promise-date field anywhere in
-  DATA_MODEL.md, because the PDF never names one. It stays unimplemented until ADR-007
-  either defines one or drops the indicator.
-
-BACKLOG T-21 says so explicitly: ship stalled-deal detection alone if ADR-007 is still
-open, and label the rest incomplete rather than inventing a threshold. An honestly empty
-panel costs less than a fabricated number a judge asks about.
-
-This module is **read-side only**. It never writes. The nudge and escalation actions
-(FR-39) are BONUS and belong to T-29.
+This module is **read-side only**. It never writes. The nudge action (FR-39, T-29) writes
+an audit row through `approval.record`, not through here.
 """
+
+from datetime import timedelta
+from decimal import Decimal
+
+from django.db.models import Avg, Count, Q
+from django.utils import timezone
+
+from core.models import Quotation, QuotationLine, SalesSetting
+
+# Stages where a quotation is still someone's problem. PAID and REJECTED are finished, so
+# they can be idle forever without being stalled.
+OPEN_STAGES = [
+    Quotation.Stage.DRAFT,
+    Quotation.Stage.PENDING_APPROVAL,
+    Quotation.Stage.APPROVED,
+    Quotation.Stage.SENT,
+    Quotation.Stage.UNDER_NEGOTIATION,
+    Quotation.Stage.CONFIRMED,
+    Quotation.Stage.FULFILLED,
+    Quotation.Stage.INVOICED,
+]
+
+# A quotation counts towards a rep's discount history once it has left DRAFT: a half-built
+# draft is not evidence of how that rep prices.
+HISTORY_STAGES = [s for s in OPEN_STAGES if s != Quotation.Stage.DRAFT] + [
+    Quotation.Stage.PAID,
+    Quotation.Stage.REJECTED,
+]
 
 
 def stalled_deals(as_of=None, stall_days=None):
-    """Quotations with no activity for longer than the configured window.
+    """Open quotations with no activity for longer than the configured window.
 
-    Reads `Quotation.last_activity_at`, which every state-changing action touches — the
-    dashboard is meaningless if that field is not maintained, which is why it is not an
-    `auto_now` column.
-
-    Only open stages count. A quotation sitting in PAID or REJECTED is finished, not
-    stalled.
-
-    Args:
-        as_of: timezone-aware datetime to measure from; defaults to now.
-        stall_days: the window. When `None`, read it from configuration — the PDF says
-            this number is configured, so a literal here would be a bug.
-
-    Returns:
-        queryset of `core.models.Quotation`, most stale first, annotated with days idle.
+    Reads `Quotation.last_activity_at`, which every state-changing action touches.
     """
-    raise NotImplementedError("T-21 — deal health dashboard (stall window from ADR-007)")
+    as_of = as_of or timezone.now()
+    if stall_days is None:
+        stall_days = SalesSetting.load().stall_days
+    cutoff = as_of - timedelta(days=stall_days)
+
+    rows = []
+    for quotation in (
+        Quotation.objects.filter(stage__in=OPEN_STAGES, last_activity_at__lt=cutoff)
+        .select_related("customer", "rep")
+        .order_by("last_activity_at")
+    ):
+        rows.append(
+            {
+                "quotation": quotation,
+                "days_idle": (as_of - quotation.last_activity_at).days,
+                "stall_days": stall_days,
+            }
+        )
+    return rows
+
+
+def rep_average_discount(rep, as_of=None, window_days=None):
+    """The rep's mean line discount over the window. `None` when they have no history."""
+    as_of = as_of or timezone.now()
+    if window_days is None:
+        window_days = SalesSetting.load().anomaly_window_days
+
+    return QuotationLine.objects.filter(
+        quotation__rep=rep,
+        quotation__stage__in=HISTORY_STAGES,
+        quotation__created_at__gte=as_of - timedelta(days=window_days),
+    ).aggregate(avg=Avg("discount_pct"))["avg"]
 
 
 def discount_anomalies(rep=None, as_of=None):
-    """Lines discounted well above the rep's historical average.
+    """Lines discounted well above the rep whose quotation it is — their own average.
 
-    **Blocked by ADR-007.** Both halves are undefined in the problem statement: how far
-    above the average counts as an anomaly, and how the average is computed — over which
-    window, counting which quotations, weighted by value or not.
-
-    Do not pick numbers here to make the panel render. If ADR-007 is still open when the
-    dashboard ships, this panel is absent or labelled incomplete, per CLAUDE.md's
-    integrity rule.
-
-    Returns:
-        list of anomaly records, each carrying the line, the rep's average, and the
-        margin by which it was exceeded, so the alert can explain itself.
+    A rep with no prior history has no average to be above, so their lines cannot be
+    anomalies. That is deliberate: the alternative is flagging every line a new rep writes.
     """
-    raise NotImplementedError("T-21 — blocked by ADR-007 (anomaly threshold undefined)")
+    as_of = as_of or timezone.now()
+    setting = SalesSetting.load()
+
+    lines = QuotationLine.objects.filter(discount_pct__gt=0).select_related(
+        "quotation", "quotation__customer", "quotation__rep", "product"
+    )
+    if rep is not None:
+        lines = lines.filter(quotation__rep=rep)
+
+    # One grouped query for every rep's average, not one per rep: the loop below touches
+    # each line, and a per-rep AVG inside it made the dashboard cost grow with headcount.
+    averages = {
+        row["quotation__rep"]: row["avg"]
+        for row in QuotationLine.objects.filter(
+            quotation__stage__in=HISTORY_STAGES,
+            quotation__created_at__gte=as_of - timedelta(days=setting.anomaly_window_days),
+        )
+        .values("quotation__rep")
+        .annotate(avg=Avg("discount_pct"))
+    }
+
+    rows = []
+    for line in lines:
+        average = averages.get(line.quotation.rep_id)
+        if average is None:
+            continue
+        over_by = Decimal(line.discount_pct) - Decimal(average)
+        if over_by >= setting.anomaly_threshold_pct:
+            rows.append(
+                {
+                    "line": line,
+                    "quotation": line.quotation,
+                    "rep_average_pct": Decimal(average).quantize(Decimal("0.01")),
+                    "over_by_pct": over_by.quantize(Decimal("0.01")),
+                    "threshold_pct": setting.anomaly_threshold_pct,
+                }
+            )
+    rows.sort(key=lambda row: row["over_by_pct"], reverse=True)
+    return rows
 
 
 def delivery_slippage(as_of=None):
-    """Orders whose delivery promise has slipped.
+    """Confirmed orders past their delivery promise that have not fully shipped.
 
-    **Blocked by ADR-007, and by the data model.** There is no promise-date field on any
-    entity because the PDF never names one. Implementing this means first deciding what a
-    delivery promise *is* here, adding the field, and recording that in ADR-007.
-
-    Returns:
-        list of slippage records.
+    "Not shipped" means no non-backorder allocation exists, which is what `fulfilment`
+    writes when stock is actually reserved.
     """
-    raise NotImplementedError("T-21 — blocked by ADR-007 (no promise date is modelled)")
+    as_of = as_of or timezone.now()
+    # The configured zone's date, not UTC's: see the note in billing.py.
+    today = timezone.localdate(as_of)
+
+    rows = []
+    for quotation in (
+        Quotation.objects.filter(
+            promised_delivery_date__lt=today,
+            stage__in=[
+                Quotation.Stage.CONFIRMED,
+                Quotation.Stage.FULFILLED,
+                Quotation.Stage.INVOICED,
+            ],
+        )
+        .select_related("customer", "rep")
+        .annotate(
+            shipped=Count("allocations", filter=Q(allocations__is_backorder=False)),
+            backordered=Count("allocations", filter=Q(allocations__is_backorder=True)),
+        )
+        .order_by("promised_delivery_date")
+    ):
+        if quotation.shipped and not quotation.backordered:
+            continue
+        rows.append(
+            {
+                "quotation": quotation,
+                "days_late": (today - quotation.promised_delivery_date).days,
+                "backordered_lines": quotation.backordered,
+            }
+        )
+    return rows
 
 
 def dashboard(as_of=None):
-    """Everything the deal health screen shows, in one call.
-
-    Composes the detectors above. Sections whose detector is still blocked come back
-    explicitly marked unavailable, with the reason, so the template renders an honest
-    "not built yet" rather than an empty list that reads as "nothing wrong".
-
-    Returns:
-        dict with keys `stalled`, `anomalies`, `slippage`, each either a result list or a
-        marker naming the ADR that blocks it.
-    """
-    raise NotImplementedError("T-21 — deal health dashboard")
+    """Everything the deal health screen shows, in one call."""
+    as_of = as_of or timezone.now()
+    setting = SalesSetting.load()
+    stalled = stalled_deals(as_of=as_of)
+    anomalies = discount_anomalies(as_of=as_of)
+    slippage = delivery_slippage(as_of=as_of)
+    return {
+        "setting": setting,
+        "stalled": stalled,
+        "anomalies": anomalies,
+        "slippage": slippage,
+        "alert_count": len(stalled) + len(anomalies) + len(slippage),
+        "as_of": as_of,
+    }

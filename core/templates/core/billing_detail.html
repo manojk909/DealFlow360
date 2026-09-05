@@ -1,4 +1,5 @@
 {% extends "core/workspace_base.html" %}
+{% load money %}
 {% block title %}Invoice {{ quotation.number }} &middot; DealFlow360{% endblock %}
 
 {% block content %}
@@ -36,7 +37,7 @@
         <tbody class="divide-y divide-slate-800 bg-slate-950/40">
           {% for line in one_time_lines %}
             <tr><td class="px-3 py-2 text-slate-200">{{ line.qty }} &times; {{ line.product.name }}</td>
-                <td class="px-3 py-2 text-right tabular-nums text-slate-100">&euro;{{ line.line_total|floatformat:2 }}</td></tr>
+                <td class="px-3 py-2 text-right tabular-nums text-slate-100">{{ line.line_total|money }}</td></tr>
           {% empty %}
             <tr><td class="px-3 py-4 text-center text-slate-600">None</td></tr>
           {% endfor %}
@@ -47,21 +48,94 @@
     {% if recurring_lines %}
       <h2 class="mt-5 text-sm font-semibold uppercase tracking-wide text-slate-300">Recurring lines</h2>
       <p class="mt-1 text-xs text-amber-200/70">
-        Deliberately <strong>not</strong> on the invoice. Recurring lines bill through a
-        separate schedule &mdash; that separation is the point of hybrid billing. The
-        schedule itself is T-20 and is not built yet.
+        Deliberately <strong>not</strong> on the invoice. Recurring lines bill through the
+        separate schedule below &mdash; that separation is the point of hybrid billing.
       </p>
       <div class="mt-2 overflow-x-auto rounded-lg border border-violet-900/50">
         <table class="w-full text-sm">
           <tbody class="divide-y divide-slate-800 bg-slate-950/40">
             {% for line in recurring_lines %}
-              <tr><td class="px-3 py-2 text-slate-200">{{ line.qty }} &times; {{ line.product.name }}
-                    <span class="text-xs text-violet-400">&middot; {{ line.subscription_plan.name }}</span></td>
-                  <td class="px-3 py-2 text-right tabular-nums text-slate-400">&euro;{{ line.line_total|floatformat:2 }}</td></tr>
+              <tr>
+                <td class="px-3 py-2 text-slate-200">{{ line.qty }} &times; {{ line.product.name }}
+                  <span class="text-xs text-violet-400">&middot; {{ line.subscription_plan.name }}</span></td>
+                <td class="px-3 py-2 text-right tabular-nums text-slate-400">{{ line.line_total|money }}</td>
+                <td class="px-3 py-2 text-right">
+                  {% comment %} FR-31 / FR-32. Both post to the service, which decides the
+                     proration and the credit — the form never computes money. {% endcomment %}
+                  <form method="post" action="{% url 'core:subscription_prorate' quotation.pk line.pk %}"
+                        class="inline-flex items-center gap-1">
+                    {% csrf_token %}
+                    <input type="number" name="qty" min="1" value="{{ line.qty }}"
+                           class="w-16 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-right text-xs tabular-nums text-slate-100">
+                    <button type="submit" class="rounded border border-violet-700 px-2 py-1 text-xs text-violet-300 hover:bg-violet-950"
+                            title="Change quantity mid-cycle; the unused days are prorated">Prorate</button>
+                  </form>
+                  <form method="post" action="{% url 'core:subscription_cancel' quotation.pk line.pk %}" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="rounded border border-rose-800 px-2 py-1 text-xs text-rose-300 hover:bg-rose-950"
+                            title="Cancel and credit the unused days of this period">Cancel</button>
+                  </form>
+                </td>
+              </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
+
+      <h2 class="mt-5 text-sm font-semibold uppercase tracking-wide text-slate-300">Billing schedule</h2>
+      {% if schedule %}
+        <p class="mt-1 text-xs text-slate-500">
+          Daily pro-rata on the current period (ADR-008): an adjustment row covers the days
+          left in the period you are already in, and every later period bills in full.
+        </p>
+        <div class="mt-2 overflow-x-auto rounded-lg border border-slate-800">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-800/60 text-left text-[0.68rem] uppercase tracking-wide text-slate-400">
+              <tr><th class="px-3 py-2">Due</th><th class="px-3 py-2">Line</th>
+                  <th class="px-3 py-2">Status</th><th class="px-3 py-2 text-right">Amount</th></tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800 bg-slate-950/40">
+              {% for entry in schedule %}
+                <tr class="{% if entry.status == 'CANCELLED' %}opacity-50{% endif %}">
+                  <td class="px-3 py-2 text-slate-300">{{ entry.due_date }}</td>
+                  <td class="px-3 py-2 text-slate-400">
+                    {{ entry.quotation_line.product.name }}
+                    {% if entry.is_proration_adjustment %}
+                      <span class="ml-1 rounded bg-violet-900 px-1.5 py-0.5 text-[0.65rem] text-violet-200">proration</span>
+                    {% endif %}
+                  </td>
+                  <td class="px-3 py-2 text-xs text-slate-500">{{ entry.get_status_display }}</td>
+                  <td class="px-3 py-2 text-right tabular-nums {% if entry.amount < 0 %}text-emerald-400{% else %}text-slate-200{% endif %}">
+                    {{ entry.amount|money }}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="mt-1 rounded border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-500">
+          No schedule yet. It is built when the order is confirmed &mdash; by the rep accepting
+          the warehouse split, or by the customer confirming in the portal.
+        </p>
+      {% endif %}
+
+      {% if credit_notes %}
+        <h2 class="mt-5 text-sm font-semibold uppercase tracking-wide text-slate-300">Credit notes</h2>
+        <div class="mt-2 overflow-x-auto rounded-lg border border-emerald-900/50">
+          <table class="w-full text-sm">
+            <tbody class="divide-y divide-slate-800 bg-slate-950/40">
+              {% for note in credit_notes %}
+                <tr>
+                  <td class="px-3 py-2 text-slate-200">{{ note.number }}</td>
+                  <td class="px-3 py-2 text-xs text-slate-500">issued {{ note.issue_date }} &middot; unused days of the current period</td>
+                  <td class="px-3 py-2 text-right tabular-nums text-emerald-400">{{ note.amount|money }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
     {% endif %}
   </section>
 
@@ -71,7 +145,7 @@
       <div class="mt-2 rounded-lg border border-slate-800 bg-slate-900 p-4">
         <div class="flex items-start justify-between">
           <div>
-            <div class="text-3xl font-semibold tabular-nums text-slate-50">&euro;{{ invoice.amount|floatformat:2 }}</div>
+            <div class="text-3xl font-semibold tabular-nums text-slate-50">{{ invoice.amount|money }}</div>
             <div class="mt-1 text-xs text-slate-500">
               issued {{ invoice.issue_date|date:"d M Y" }} &middot; due {{ invoice.due_date|date:"d M Y" }}
             </div>
@@ -84,9 +158,9 @@
 
         <dl class="mt-4 space-y-1 border-t border-slate-800 pt-3 text-sm">
           <div class="flex justify-between"><dt class="text-slate-400">Paid</dt>
-            <dd class="tabular-nums text-emerald-400">&euro;{{ paid|floatformat:2 }}</dd></div>
+            <dd class="tabular-nums text-emerald-400">{{ paid|money }}</dd></div>
           <div class="flex justify-between"><dt class="text-slate-400">Outstanding</dt>
-            <dd class="tabular-nums text-amber-400">&euro;{{ outstanding|floatformat:2 }}</dd></div>
+            <dd class="tabular-nums text-amber-400">{{ outstanding|money }}</dd></div>
         </dl>
 
         <p class="mt-3 text-xs text-slate-600">
@@ -128,7 +202,7 @@
               {% for p in payments %}
                 <tr><td class="px-3 py-2 text-slate-400">{{ p.paid_at|date:"d M Y H:i" }}</td>
                     <td class="px-3 py-2 text-slate-400">{{ p.method }}</td>
-                    <td class="px-3 py-2 text-right tabular-nums text-slate-100">&euro;{{ p.amount|floatformat:2 }}</td></tr>
+                    <td class="px-3 py-2 text-right tabular-nums text-slate-100">{{ p.amount|money }}</td></tr>
               {% endfor %}
             </tbody>
           </table>

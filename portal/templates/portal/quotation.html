@@ -1,4 +1,5 @@
 {% extends "portal/base.html" %}
+{% load money %}
 {% block title %}Quotation {{ quotation.number }}{% endblock %}
 
 {% block content %}
@@ -43,7 +44,7 @@
         <div class="min-w-0 flex-1">
           <div class="font-medium text-slate-900">{{ line.product.name }}</div>
           <div class="mt-0.5 text-sm text-slate-500">
-            {{ line.qty }} &times; &euro;{{ line.unit_price|floatformat:2 }}
+            {{ line.qty }} &times; {{ line.unit_price|money }}
             {% if line.line_type == 'RECURRING' %}
               <span class="ml-1 rounded bg-violet-100 px-1.5 py-0.5 text-xs font-medium text-violet-800">
                 {{ line.subscription_plan.get_interval_display|lower }} subscription
@@ -59,7 +60,7 @@
         {% endif %}
 
         <div class="w-28 text-right text-base font-semibold tabular-nums text-slate-900">
-          &euro;{{ line.line_total|floatformat:2 }}
+          {{ line.line_total|money }}
         </div>
       </div>
     {% empty %}
@@ -71,7 +72,7 @@
 
   <dl class="mt-4 space-y-1.5 text-sm">
     <div class="flex justify-between text-slate-600">
-      <dt>Subtotal</dt><dd class="tabular-nums">&euro;{{ quotation.subtotal|floatformat:2 }}</dd>
+      <dt>Subtotal</dt><dd class="tabular-nums">{{ quotation.subtotal|money }}</dd>
     </div>
     {% if quotation.order_discount_pct > 0 %}
       <div class="flex justify-between text-emerald-700">
@@ -79,7 +80,7 @@
       </div>
     {% endif %}
     <div class="flex justify-between border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
-      <dt>Total</dt><dd class="tabular-nums">&euro;{{ quotation.total|floatformat:2 }}</dd>
+      <dt>Total</dt><dd class="tabular-nums">{{ quotation.total|money }}</dd>
     </div>
   </dl>
 </section>

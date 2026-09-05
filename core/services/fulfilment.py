@@ -111,8 +111,12 @@ def _ranked_stock(product):
     )
 
 
-def suggest_split_for_line(line):
+def suggest_split_for_line(line, qty=None):
     """Allocations for one line, by the rule at the top of this module. Reads only.
+
+    `qty` defaults to the whole line. T-24 passes the outstanding backorder quantity
+    instead, so a consolidated shipment is planned by this same rule rather than a
+    second one written to look like it.
 
     Solved per line, independently. Across a multi-line order the shipment count is
     therefore not globally optimal — two lines could each pick a different cheapest
@@ -131,7 +135,7 @@ def suggest_split_for_line(line):
         return []  # Not stocked anywhere. Skipped, deliberately — see the module note.
 
     cheapest = rows[0]
-    remaining = line.qty
+    remaining = line.qty if qty is None else qty
     allocations = []
 
     # Single-shipment shortcut: never fragment a line the cheapest warehouse could have
@@ -279,7 +283,7 @@ def accept_split(quotation, actor, suggestion=None):
         InsufficientStock: if availability changed underneath.
     """
     from core.models import FulfilmentAllocation, Quotation
-    from core.services import approval
+    from core.services import approval, billing
 
     allowed = {Quotation.Stage.APPROVED, Quotation.Stage.CONFIRMED}
     if quotation.stage not in allowed:
@@ -325,6 +329,7 @@ def accept_split(quotation, actor, suggestion=None):
                 actor=actor,
                 reason="Rep confirmed the order alongside accepting the warehouse split.",
             )
+            billing.on_order_confirmed(quotation)
 
         quotation.stage = Quotation.Stage.FULFILLED
         quotation.last_activity_at = timezone.now()
@@ -444,6 +449,65 @@ def consolidate_backorder(line, actor):
     against the remaining quantity rather than implementing a second rule.
 
     Returns:
-        list[Allocation] — what the remaining quantity can now be filled from.
+        list[Allocation] — what the remaining quantity was filled from. Empty when stock
+        still has not arrived, which is the honest answer rather than an error.
     """
-    raise NotImplementedError("T-24 — consolidate remaining backorder")
+    from core.models import FulfilmentAllocation
+
+    backorders = list(
+        line.allocations.filter(is_backorder=True).order_by("id")
+    )
+    outstanding = sum(row.qty for row in backorders)
+    if not outstanding:
+        return []
+
+    # Reuse the ordinary split against the outstanding quantity: one allocation rule for
+    # the whole system, so a consolidated shipment cannot be cheaper than an honest one.
+    filled = [
+        allocation
+        for allocation in suggest_split_for_line(line, outstanding)
+        if not allocation.is_backorder
+    ]
+    if not filled:
+        return []
+
+    with transaction.atomic():
+        _reserve(filled)
+        FulfilmentAllocation.objects.bulk_create(
+            [
+                FulfilmentAllocation(
+                    quotation=line.quotation,
+                    quotation_line=line,
+                    warehouse_id=allocation.warehouse_id,
+                    qty=allocation.qty,
+                    is_backorder=False,
+                )
+                for allocation in filled
+            ]
+        )
+        newly_filled = sum(allocation.qty for allocation in filled)
+        remaining = outstanding - newly_filled
+        # Shrink or clear the backorder rows the new stock just covered.
+        left = newly_filled
+        for row in backorders:
+            if left <= 0:
+                break
+            take = min(left, row.qty)
+            left -= take
+            if take == row.qty:
+                row.delete()
+            else:
+                row.qty -= take
+                row.save(update_fields=["qty"])
+
+        approval.record(
+            line.quotation,
+            action="BACKORDER_CONSOLIDATED",
+            actor=actor,
+            reason=(
+                f"{newly_filled} of {outstanding} backordered {line.product.name} "
+                f"filled from newly available stock. "
+                + (f"{remaining} still on backorder." if remaining else "Backorder cleared.")
+            ),
+        )
+    return filled

@@ -58,6 +58,10 @@ class Stock(models.Model):
     warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE, related_name="stock_rows")
     qty_on_hand = models.PositiveIntegerField(default=0)
     qty_reserved = models.PositiveIntegerField(default=0)
+    # ADR-009 item 3. PDF A4 says "replenishment rules per warehouse" without saying what
+    # a rule does, so it is a reorder point: available below this flags the row for
+    # restock. Display-only — nothing auto-orders, which would need a supplier model.
+    reorder_point = models.PositiveIntegerField(default=0)
 
     class Meta:
         verbose_name_plural = "stock"

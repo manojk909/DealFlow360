@@ -73,7 +73,14 @@ def resolve_unit_price(product, customer, variant=None):
             f"Variant {variant.pk} belongs to product {variant.product_id}, not {product.pk}."
         )
 
-    entry = product.price_entries.filter(tier=customer.tier).first()
+    # `.all()` rather than `.filter()`: when the caller has prefetched `price_entries` this
+    # reads the cache and issues no query, and when nobody has, it costs exactly the one
+    # query `.filter()` used to. The upsell panel calls this once per candidate, so the
+    # difference is a query per suggestion on the busiest screen in the application.
+    entry = next(
+        (row for row in product.price_entries.all() if row.tier_id == customer.tier_id),
+        None,
+    )
     price = entry.price if entry is not None else product.list_price
 
     if variant is not None:

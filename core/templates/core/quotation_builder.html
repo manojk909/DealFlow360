@@ -1,4 +1,5 @@
 {% extends "core/workspace_base.html" %}
+{% load money %}
 {% block title %}{{ quotation.number }} &middot; DealFlow360{% endblock %}
 
 {% block content %}
@@ -45,7 +46,7 @@
                         hx-target="#builder-region" hx-swap="outerHTML"
                         class="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm text-slate-300 hover:bg-slate-800 hover:text-sky-300">
                   <span>{{ product.name }}</span>
-                  <span class="tabular-nums text-xs text-slate-500">&euro;{{ product.list_price|floatformat:2 }}</span>
+                  <span class="tabular-nums text-xs text-slate-500">{{ product.list_price|money }}</span>
                 </button>
               {% empty %}
                 <p class="px-2 py-2 text-xs text-slate-600">No active products</p>

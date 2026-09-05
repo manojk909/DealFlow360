@@ -1,0 +1,165 @@
+{% extends "core/workspace_base.html" %}
+{% load money %}
+{% block title %}Reports &middot; DealFlow360{% endblock %}
+
+{% comment %} A7. The four filters the PDF names — Period, Sales Team / Rep, Approval Status,
+   Product / Category — over one queryset that the CSV export reuses, so the file and the
+   screen can never disagree. Print-to-PDF is the browser's; a second renderer would be a
+   dependency for something Ctrl-P already does. {% endcomment %}
+
+{% block content %}
+<div class="flex flex-wrap items-end justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight text-slate-50">Reports</h1>
+    <p class="mt-1 text-sm text-slate-400">Sales performance across period, team, approval status and category.</p>
+  </div>
+  <div class="flex gap-2 print:hidden">
+    <a href="{% url 'core:reports_export' %}?{{ request.GET.urlencode }}"
+       class="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 no-underline hover:bg-slate-800">Export CSV</a>
+    <button type="button" onclick="window.print()"
+            class="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800">Print / PDF</button>
+  </div>
+</div>
+
+<form method="get" class="mt-5 grid gap-3 rounded-xl border border-slate-800 bg-slate-900 p-4 sm:grid-cols-2 xl:grid-cols-5 print:hidden">
+  <label class="text-xs text-slate-400">Period
+    <select name="period" class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100">
+      {% for key, label in periods.items %}
+        <option value="{{ key }}" {% if filters.period == key %}selected{% endif %}>{{ label.0 }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="text-xs text-slate-400">Rep
+    <select name="rep" class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100">
+      <option value="">All reps</option>
+      {% for rep in reps %}
+        <option value="{{ rep.pk }}" {% if filters.rep == rep.pk|stringformat:"s" %}selected{% endif %}>{{ rep.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="text-xs text-slate-400">Sales team
+    <select name="team" class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100">
+      <option value="">All teams</option>
+      {% for team in teams %}
+        <option value="{{ team }}" {% if filters.team == team %}selected{% endif %}>{{ team }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="text-xs text-slate-400">Approval status
+    <select name="status" class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100">
+      <option value="">All stages</option>
+      {% for value, label in stages %}
+        <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="text-xs text-slate-400">Product category
+    <select name="category" class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100">
+      <option value="">All categories</option>
+      {% for category in categories %}
+        <option value="{{ category.pk }}" {% if filters.category == category.pk|stringformat:"s" %}selected{% endif %}>{{ category.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="text-xs text-slate-400">Custom from
+    <input type="date" name="date_from" value="{{ filters.date_from }}"
+           class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100">
+  </label>
+  <label class="text-xs text-slate-400">Custom to
+    <input type="date" name="date_to" value="{{ filters.date_to }}"
+           class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100">
+  </label>
+  <div class="flex items-end gap-2 xl:col-span-3">
+    <button type="submit" class="rounded bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500">Apply filters</button>
+    <a href="{% url 'core:reports' %}" class="rounded border border-slate-700 px-4 py-2 text-sm text-slate-300 no-underline hover:bg-slate-800">Reset</a>
+  </div>
+</form>
+
+<div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <span class="text-xs font-medium text-slate-400">Quotations</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-slate-50">{{ summary.count }}</p>
+    <p class="mt-1 text-xs text-slate-500">{{ summary.total_value|money }} total value</p>
+  </div>
+  <div class="rounded-xl border border-emerald-900/50 bg-gradient-to-br from-emerald-950/50 to-slate-900 p-4">
+    <span class="text-xs font-medium text-emerald-200/70">Invoiced or paid</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-emerald-300">{{ summary.won_count }}</p>
+    <p class="mt-1 text-xs text-slate-500">{{ summary.won_value|money }} realised</p>
+  </div>
+  <div class="rounded-xl border border-rose-900/50 bg-gradient-to-br from-rose-950/50 to-slate-900 p-4">
+    <span class="text-xs font-medium text-rose-200/70">Needed approval</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-rose-300">{{ summary.flagged_count }}</p>
+    <p class="mt-1 text-xs text-slate-500">risk score above zero</p>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <span class="text-xs font-medium text-slate-400">Average margin</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-slate-50">{{ summary.avg_margin_pct }}%</p>
+    <p class="mt-1 text-xs text-slate-500">mean across the filtered set</p>
+  </div>
+</div>
+
+<section class="mt-6">
+  <h2 class="text-xs font-semibold uppercase tracking-widest text-slate-400">Products by value</h2>
+  <p class="mt-0.5 text-xs text-slate-500">Best selling and most discounted items in the filtered set.</p>
+  <div class="mt-2 overflow-x-auto rounded-xl border border-slate-800">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-800/60 text-left text-[0.68rem] uppercase tracking-wide text-slate-400">
+        <tr>
+          <th class="px-4 py-2.5">Product</th><th class="px-4 py-2.5">Category</th>
+          <th class="px-4 py-2.5 text-right">Units</th><th class="px-4 py-2.5 text-right">Value</th>
+          <th class="px-4 py-2.5 text-right">Average discount</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-800 bg-slate-900">
+        {% for row in product_rows %}
+          <tr>
+            <td class="px-4 py-2.5 text-slate-200">{{ row.product.name }}</td>
+            <td class="px-4 py-2.5 text-slate-400">{{ row.product.category.name }}</td>
+            <td class="px-4 py-2.5 text-right tabular-nums text-slate-300">{{ row.qty }}</td>
+            <td class="px-4 py-2.5 text-right tabular-nums text-slate-100">{{ row.value|money }}</td>
+            <td class="px-4 py-2.5 text-right tabular-nums {% if row.avg_discount_pct > 10 %}text-rose-400{% else %}text-slate-400{% endif %}">
+              {{ row.avg_discount_pct }}%
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="px-4 py-8 text-center text-slate-600">Nothing matches these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="mt-6">
+  <h2 class="text-xs font-semibold uppercase tracking-widest text-slate-400">Quotations</h2>
+  <div class="mt-2 overflow-x-auto rounded-xl border border-slate-800">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-800/60 text-left text-[0.68rem] uppercase tracking-wide text-slate-400">
+        <tr>
+          <th class="px-4 py-2.5">Number</th><th class="px-4 py-2.5">Customer</th>
+          <th class="px-4 py-2.5">Rep</th><th class="px-4 py-2.5">Team</th>
+          <th class="px-4 py-2.5">Stage</th><th class="px-4 py-2.5 text-right">Risk</th>
+          <th class="px-4 py-2.5 text-right">Total</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-800 bg-slate-900">
+        {% for q in quotations %}
+          <tr>
+            <td class="px-4 py-2.5">
+              <a href="{% url 'core:quotation_builder' q.pk %}"
+                 class="font-medium text-sky-400 no-underline hover:underline">{{ q.number }}</a>
+            </td>
+            <td class="px-4 py-2.5 text-slate-200">{{ q.customer.name }}</td>
+            <td class="px-4 py-2.5 text-slate-400">{{ q.rep.name }}</td>
+            <td class="px-4 py-2.5 text-slate-500">{{ q.rep.team|default:"&mdash;" }}</td>
+            <td class="px-4 py-2.5 text-slate-400">{{ q.get_stage_display }}</td>
+            <td class="px-4 py-2.5 text-right tabular-nums {% if q.risk_score > 0 %}text-rose-400{% else %}text-slate-500{% endif %}">{{ q.risk_score }}</td>
+            <td class="px-4 py-2.5 text-right tabular-nums text-slate-100">{{ q.total|money }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="px-4 py-8 text-center text-slate-600">Nothing matches these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

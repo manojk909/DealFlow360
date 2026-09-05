@@ -75,6 +75,10 @@ class BillingScheduleEntry(models.Model):
     class Meta:
         verbose_name_plural = "billing schedule entries"
         ordering = ["due_date", "id"]
+        indexes = [
+            # The subscriptions screen asks for scheduled entries due from today onward.
+            models.Index(fields=["status", "due_date"], name="schedule_status_due_idx"),
+        ]
 
     def __str__(self):
         return f"{self.quotation.number} — {self.due_date}: {self.amount}"

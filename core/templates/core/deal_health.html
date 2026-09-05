@@ -1,0 +1,154 @@
+{% extends "core/workspace_base.html" %}
+{% block title %}Deal Health &middot; DealFlow360{% endblock %}
+
+{% comment %} B9 / FR-33. Three detectors, each labelled with the threshold it used, and each
+   row a link into the quotation it is about. ADR-007 put those thresholds in a database
+   row, so the caption below every panel is read from the same row the service read. {% endcomment %}
+
+{% block content %}
+<div class="flex flex-wrap items-end justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight text-slate-50">Deal Health</h1>
+    <p class="mt-1 text-sm text-slate-400">
+      {{ alert_count }} alert{{ alert_count|pluralize }} across stalled deals, discount
+      anomalies and delivery slippage. Thresholds are configuration, not code &mdash;
+      <a href="/admin/core/salessetting/" class="text-sky-400 no-underline hover:underline">change them in the back-end</a>.
+    </p>
+  </div>
+</div>
+
+<div class="mt-5 grid gap-3 sm:grid-cols-3">
+  <div class="rounded-xl border border-amber-900/50 bg-gradient-to-br from-amber-950/50 to-slate-900 p-4">
+    <span class="text-xs font-medium text-amber-200/70">Stalled deals</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-amber-300">{{ stalled|length }}</p>
+    <p class="mt-1 text-xs text-slate-500">idle more than {{ setting.stall_days }} day{{ setting.stall_days|pluralize }}</p>
+  </div>
+  <div class="rounded-xl border border-rose-900/50 bg-gradient-to-br from-rose-950/50 to-slate-900 p-4">
+    <span class="text-xs font-medium text-rose-200/70">Discount anomalies</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-rose-300">{{ anomalies|length }}</p>
+    <p class="mt-1 text-xs text-slate-500">&ge; {{ setting.anomaly_threshold_pct|floatformat:0 }} pt above the rep&rsquo;s own average</p>
+  </div>
+  <div class="rounded-xl border border-violet-900/50 bg-gradient-to-br from-violet-950/50 to-slate-900 p-4">
+    <span class="text-xs font-medium text-violet-200/70">Delivery slippage</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-violet-300">{{ slippage|length }}</p>
+    <p class="mt-1 text-xs text-slate-500">promise is confirmation + {{ setting.delivery_promise_days }} days</p>
+  </div>
+</div>
+
+<section class="mt-6">
+  <h2 class="text-xs font-semibold uppercase tracking-widest text-slate-400">Stalled deals</h2>
+  <p class="mt-0.5 text-xs text-slate-500">Open quotations nobody has touched. Nudging one records an audit entry and resets its clock.</p>
+  <div class="mt-2 overflow-x-auto rounded-xl border border-slate-800">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-800/60 text-left text-[0.68rem] uppercase tracking-wide text-slate-400">
+        <tr>
+          <th class="px-4 py-2.5">Quotation</th><th class="px-4 py-2.5">Customer</th>
+          <th class="px-4 py-2.5">Rep</th><th class="px-4 py-2.5">Stage</th>
+          <th class="px-4 py-2.5 text-right">Days idle</th><th class="px-4 py-2.5"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-800 bg-slate-900">
+        {% for row in stalled %}
+          <tr>
+            <td class="px-4 py-2.5">
+              <a href="{% url 'core:quotation_builder' row.quotation.pk %}"
+                 class="font-medium text-sky-400 no-underline hover:underline">{{ row.quotation.number }}</a>
+            </td>
+            <td class="px-4 py-2.5 text-slate-200">{{ row.quotation.customer.name }}</td>
+            <td class="px-4 py-2.5 text-slate-400">{{ row.quotation.rep.name }}</td>
+            <td class="px-4 py-2.5 text-slate-400">{{ row.quotation.get_stage_display }}</td>
+            <td class="px-4 py-2.5 text-right tabular-nums font-semibold text-amber-300">{{ row.days_idle }}</td>
+            <td class="px-4 py-2.5 text-right">
+              <form method="post" action="{% url 'core:deal_health_nudge' row.quotation.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="rounded border border-amber-700 px-2 py-1 text-xs text-amber-300 hover:bg-amber-950">
+                  Nudge rep
+                </button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-slate-600">
+            Nothing idle beyond {{ setting.stall_days }} day{{ setting.stall_days|pluralize }}.
+          </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="mt-6">
+  <h2 class="text-xs font-semibold uppercase tracking-widest text-slate-400">Discount anomalies</h2>
+  <p class="mt-0.5 text-xs text-slate-500">
+    Measured against each rep&rsquo;s own mean discount over the last {{ setting.anomaly_window_days }} days,
+    not a company-wide number &mdash; a rep with no history raises no alerts.
+  </p>
+  <div class="mt-2 overflow-x-auto rounded-xl border border-slate-800">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-800/60 text-left text-[0.68rem] uppercase tracking-wide text-slate-400">
+        <tr>
+          <th class="px-4 py-2.5">Quotation</th><th class="px-4 py-2.5">Line</th>
+          <th class="px-4 py-2.5">Rep</th><th class="px-4 py-2.5 text-right">Given</th>
+          <th class="px-4 py-2.5 text-right">Rep average</th><th class="px-4 py-2.5 text-right">Over by</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-800 bg-slate-900">
+        {% for row in anomalies %}
+          <tr class="bg-rose-950/20">
+            <td class="px-4 py-2.5">
+              <a href="{% url 'core:quotation_builder' row.quotation.pk %}"
+                 class="font-medium text-sky-400 no-underline hover:underline">{{ row.quotation.number }}</a>
+            </td>
+            <td class="px-4 py-2.5 text-slate-200">{{ row.line.product.name }}</td>
+            <td class="px-4 py-2.5 text-slate-400">{{ row.quotation.rep.name }}</td>
+            <td class="px-4 py-2.5 text-right tabular-nums text-rose-300">{{ row.line.discount_pct|floatformat:2 }}%</td>
+            <td class="px-4 py-2.5 text-right tabular-nums text-slate-400">{{ row.rep_average_pct }}%</td>
+            <td class="px-4 py-2.5 text-right tabular-nums font-semibold text-rose-300">+{{ row.over_by_pct }} pt</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-slate-600">
+            No line sits {{ setting.anomaly_threshold_pct|floatformat:0 }} points or more above its rep&rsquo;s average.
+          </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="mt-6">
+  <h2 class="text-xs font-semibold uppercase tracking-widest text-slate-400">Delivery slippage</h2>
+  <p class="mt-0.5 text-xs text-slate-500">
+    Confirmed orders past their promised date with stock still on backorder. Orders confirmed
+    before a promise was recorded have none and are not guessed at.
+  </p>
+  <div class="mt-2 overflow-x-auto rounded-xl border border-slate-800">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-800/60 text-left text-[0.68rem] uppercase tracking-wide text-slate-400">
+        <tr>
+          <th class="px-4 py-2.5">Quotation</th><th class="px-4 py-2.5">Customer</th>
+          <th class="px-4 py-2.5">Promised</th><th class="px-4 py-2.5 text-right">Days late</th>
+          <th class="px-4 py-2.5 text-right">Backordered lines</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-800 bg-slate-900">
+        {% for row in slippage %}
+          <tr>
+            <td class="px-4 py-2.5">
+              <a href="{% url 'core:fulfilment_detail' row.quotation.pk %}"
+                 class="font-medium text-sky-400 no-underline hover:underline">{{ row.quotation.number }}</a>
+            </td>
+            <td class="px-4 py-2.5 text-slate-200">{{ row.quotation.customer.name }}</td>
+            <td class="px-4 py-2.5 text-slate-400">{{ row.quotation.promised_delivery_date }}</td>
+            <td class="px-4 py-2.5 text-right tabular-nums font-semibold text-violet-300">{{ row.days_late }}</td>
+            <td class="px-4 py-2.5 text-right tabular-nums text-slate-400">{{ row.backordered_lines }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-slate-600">
+            Every confirmed order is inside its delivery promise.
+          </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

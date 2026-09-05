@@ -16,15 +16,42 @@ Built for the Odoo Hackathon 2026 by **Team 317** (solo build).
 
 ## Status
 
-**T-01 (project scaffold) — done.** What exists today is a running Django project, a custom
-`User` model with a `role` field, a migrated SQLite database, the Django admin, and a
-`/health/` page that proves the round trip.
+**Feature complete against the problem statement.** Every module in PDF §4 (A1–A7, B1–B9)
+is built, and all eight steps of the §9 quick test flow run end to end. **257 tests pass.**
 
-The quotation builder, approval routing, warehouse split, billing and customer portal are
-**not built yet**. See `tasks/BACKLOG.md` for the ordered plan and `tasks/CURRENT.md` for
-the task in progress.
+| PDF module | Where it lives |
+|---|---|
+| A1 Authentication (login / signup) | `/login/`, `/signup/`, role-based access |
+| A2 Products, variants, price lists | Django admin — the back-end configuration area |
+| A3 Discount tiers & approval chains | Admin: ceilings per tier and per category, chain rules |
+| A4 Warehouses, stock, replenishment | **Warehouses** screen per site + Admin; reorder points flag restock |
+| A5 Subscription plans | Admin; daily pro-rata and credit-on-cancel rules (ADR-008) |
+| A6 Upsell rules | Product pairs, promotion flags, margin floor |
+| A7 Reporting & dashboard | **Reports** — period / rep / team / status / category, CSV + print |
+| B1 Workspace menu | Sidebar: Quotations, Pipeline, Approvals, Fulfilment, Invoices, Subscriptions, Deal Health, Reports |
+| B2 Quotation list / pipeline | **Quotations** (table) and **Pipeline** (Kanban) |
+| B3 Quotation builder | Live margin, per-line ceiling check, variants |
+| B4 Approval screen | Blended score, per-line breakdown, chain, audit trail |
+| B5 Upsell panel | Ranked by co-purchase, margin delta, promotion tag |
+| B6 Fulfilment & warehouse split | Suggested split, manual override, consolidate backorder |
+| B7 Subscriptions & billing | Schedule, mid-cycle proration, cancel with credit note |
+| B8 Customer portal | Separate app, token-scoped, negotiation re-enters approval |
+| B9 Deal health | Stalled deals, discount anomalies, delivery slippage, nudge |
+| Profile | Overview, activity, access and preferences per signed-in user |
+| Customers & assets | What each account owns, MRR/ARR, and a one-click renewal queue (ADR-013) |
 
----
+Not built, and deliberately so: multi-currency and multi-company (PDF §7 marks both a
+bonus), and subscription *plan* changes as distinct from quantity changes. See
+`docs/NEXT.md`.
+
+**Themes.** The dark theme copies the mockup and is the default; a light mode is one
+toggle in the sidebar footer, remembered per browser.
+
+**Currency.** ₹ (INR) by default with Indian digit grouping, configured on one settings row
+(ADR-012) rather than hard-coded per template.
+
+**Performance.** Every list screen is O(1) in row count, asserted in CI — see
+`docs/SCALE.md` for the measured query budgets and what was fixed to get there.
 
 ## Stack
 

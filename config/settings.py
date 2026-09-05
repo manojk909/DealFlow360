@@ -78,6 +78,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "core.context_processors.roles",
             ],
         },
     },
@@ -89,10 +90,13 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 # ADR-002: SQLite, one local file. Rebuilt from migrations + the seed script, so it is
 # gitignored and safe to delete when it gets into a bad state.
+# The path is overridable so the database can be migrated or seeded somewhere other than
+# the working tree — a network-mounted checkout, for instance, where SQLite's locking
+# fails. Unset, it is the file beside manage.py, which is what every instruction assumes.
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": os.environ.get("DJANGO_DB_PATH") or BASE_DIR / "db.sqlite3",
     }
 }
 

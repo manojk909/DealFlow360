@@ -59,6 +59,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField("email address", unique=True)
     name = models.CharField("full name", max_length=150)
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.REP)
+    # ADR-009 item 2. PDF A7 filters reports by "Sales Team / Rep" but describes no team
+    # entity, membership or hierarchy, so a team is a label on the user, not a table.
+    team = models.CharField(max_length=60, blank=True, default="")
 
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(

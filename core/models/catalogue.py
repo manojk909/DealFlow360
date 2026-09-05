@@ -98,7 +98,7 @@ class PriceListEntry(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="price_entries")
     tier = models.ForeignKey("core.CustomerTier", on_delete=models.CASCADE, related_name="price_entries")
     price = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
-    currency = models.CharField(max_length=3, default="EUR")
+    currency = models.CharField(max_length=3, default="INR")
 
     class Meta:
         verbose_name_plural = "price list entries"

@@ -1,53 +1,216 @@
 {% extends "core/base.html" %}
 
-{% comment %} The internal rep workspace. Deliberately its own chrome: a bright tab strip, wide
+{% comment %} The internal rep workspace. Deliberately its own chrome: a grouped sidebar, wide
    content, card surfaces. It must not be mistakable for the Django admin, which is the
-   backend *configuration* area and looks nothing like this. {% endcomment %}
+   backend *configuration* area and looks nothing like this.
 
-{% block main_class %}mx-auto max-w-7xl px-4 py-6{% endblock %}
+   T-36: the horizontal tab strip became a sidebar. Four reasons, in order of weight:
+   grouping ("Pipeline" vs "Operations") is what makes an application read as a system
+   rather than a page; the unbuilt screens now sit under an honest "Coming next" heading
+   instead of masquerading as disabled tabs; the identity/session controls get a home of
+   their own instead of crowding the right edge of the tab row; and the duplicated global
+   header (a second "DealFlow360" and a second "Back-end" link) disappears. {% endcomment %}
+
+{% block topbar %}{% endblock %}
+
+{% block main_class %}px-6 py-8 md:ml-64 md:px-10{% endblock %}
+{% block footer_class %}px-6 pb-10 md:ml-64 md:px-10{% endblock %}
 
 {% block chrome %}
-<nav class="border-b border-sky-800 bg-sky-700">
-  <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-1 px-4">
+{% comment %} `md:fixed` rather than fixed: below md the sidebar becomes an ordinary block at
+   the top of the document and the main column drops its margin, so the workspace stays
+   usable on a phone without a second layout. {% endcomment %}
+<aside class="border-b border-slate-800 bg-slate-900 md:fixed md:inset-y-0 md:left-0 md:z-20 md:flex md:w-64 md:flex-col md:border-b-0 md:border-r">
 
-    {% url 'core:quotation_list' as quotations_url %}
-    <a href="{{ quotations_url }}"
-       class="border-b-2 px-3 py-2.5 text-sm font-medium no-underline
-              {% if active == 'quotations' %}border-white text-white{% else %}border-transparent text-sky-100 hover:text-white{% endif %}">
+  <div class="flex items-center gap-2.5 px-5 py-4">
+    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-sm font-bold text-white">DF</span>
+    <span class="leading-tight">
+      <span class="block text-sm font-semibold tracking-tight text-slate-100">DealFlow360</span>
+      <span class="block text-[0.65rem] uppercase tracking-widest text-slate-500">Sales operations</span>
+    </span>
+  </div>
+
+  <nav class="flex flex-wrap gap-1 px-3 pb-3 text-sm md:flex-1 md:flex-col md:flex-nowrap md:overflow-y-auto">
+
+    <p class="hidden px-2 pb-1 pt-3 text-[0.65rem] font-semibold uppercase tracking-widest text-slate-500 md:block">Pipeline</p>
+
+    <a href="{% url 'core:quotation_list' %}"
+       class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 no-underline
+              {% if active == 'quotations' %}bg-sky-500/15 font-medium text-sky-300{% else %}text-slate-400 hover:bg-slate-800 hover:text-slate-100{% endif %}">
+      <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4" width="7" height="16" rx="1.5"/><rect x="14" y="4" width="7" height="9" rx="1.5"/>
+      </svg>
       Quotations
     </a>
 
-    <a href="{% url 'core:approval_list' %}"
-       class="border-b-2 px-3 py-2.5 text-sm font-medium no-underline
-              {% if active == 'approvals' %}border-white text-white{% else %}border-transparent text-sky-100 hover:text-white{% endif %}">
-      Approvals
+    <a href="{% url 'core:pipeline' %}"
+       class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 no-underline
+              {% if active == 'pipeline' %}bg-sky-500/15 font-medium text-sky-300{% else %}text-slate-400 hover:bg-slate-800 hover:text-slate-100{% endif %}">
+      <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="9.5" y="4" width="5" height="11" rx="1.5"/>
+        <rect x="16" y="4" width="5" height="7" rx="1.5"/>
+      </svg>
+      Pipeline
     </a>
 
+    {% if approver %}
+    <a href="{% url 'core:approval_list' %}"
+       class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 no-underline
+              {% if active == 'approvals' %}bg-sky-500/15 font-medium text-sky-300{% else %}text-slate-400 hover:bg-slate-800 hover:text-slate-100{% endif %}">
+      <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/>
+      </svg>
+      Approvals
+    </a>
+    {% endif %}
+
+    <a href="{% url 'core:customer_list' %}"
+       class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 no-underline
+              {% if active == 'customers' %}bg-sky-500/15 font-medium text-sky-300{% else %}text-slate-400 hover:bg-slate-800 hover:text-slate-100{% endif %}">
+      <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 5.5a3.2 3.2 0 0 1 0 5.5M18 20a6.4 6.4 0 0 0-2-4.6"/>
+      </svg>
+      Customers
+    </a>
+
+    <p class="hidden px-2 pb-1 pt-4 text-[0.65rem] font-semibold uppercase tracking-widest text-slate-500 md:block">Operations</p>
+
     <a href="{% url 'core:fulfilment_list' %}"
-       class="border-b-2 px-3 py-2.5 text-sm font-medium no-underline
-              {% if active == 'fulfilment' %}border-white text-white{% else %}border-transparent text-sky-100 hover:text-white{% endif %}">
+       class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 no-underline
+              {% if active == 'fulfilment' %}bg-sky-500/15 font-medium text-sky-300{% else %}text-slate-400 hover:bg-slate-800 hover:text-slate-100{% endif %}">
+      <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5z"/><path d="M3 8.5 12 13l9-4.5M12 13v7"/>
+      </svg>
       Fulfilment
     </a>
 
+    <a href="{% url 'core:renewal_list' %}"
+       class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 no-underline
+              {% if active == 'renewals' %}bg-sky-500/15 font-medium text-sky-300{% else %}text-slate-400 hover:bg-slate-800 hover:text-slate-100{% endif %}">
+      <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 12a8 8 0 0 1 13.7-5.6L20 8"/><path d="M20 4v4h-4"/>
+        <path d="M20 12a8 8 0 0 1-13.7 5.6L4 16"/><path d="M4 20v-4h4"/>
+      </svg>
+      Renewals
+    </a>
+
+    <a href="{% url 'core:warehouse_list' %}"
+       class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 no-underline
+              {% if active == 'warehouses' %}bg-sky-500/15 font-medium text-sky-300{% else %}text-slate-400 hover:bg-slate-800 hover:text-slate-100{% endif %}">
+      <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 9.5 12 4l9 5.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M8 21v-7h8v7"/>
+      </svg>
+      Warehouses
+    </a>
+
     <a href="{% url 'core:billing_list' %}"
-       class="border-b-2 px-3 py-2.5 text-sm font-medium no-underline
-              {% if active == 'invoices' %}border-white text-white{% else %}border-transparent text-sky-100 hover:text-white{% endif %}">
+       class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 no-underline
+              {% if active == 'invoices' %}bg-sky-500/15 font-medium text-sky-300{% else %}text-slate-400 hover:bg-slate-800 hover:text-slate-100{% endif %}">
+      <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9.5 8.5h5M9.5 12.5h5"/>
+      </svg>
       Invoices
     </a>
 
-    {% comment %} Named in the mockup, not built yet. Shown greyed rather than hidden: an absent
-       feature honestly labelled costs less than one quietly missing. {% endcomment %}
-    {% for label, task in unbuilt %}
-      <span class="cursor-not-allowed px-3 py-2.5 text-sm text-sky-300/50"
-            title="Not built yet — {{ task }}">{{ label }}</span>
-    {% endfor %}
+    <a href="{% url 'core:subscription_list' %}"
+       class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 no-underline
+              {% if active == 'subscriptions' %}bg-sky-500/15 font-medium text-sky-300{% else %}text-slate-400 hover:bg-slate-800 hover:text-slate-100{% endif %}">
+      <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 12a8 8 0 0 1 13.7-5.6L20 8"/><path d="M20 4v4h-4"/>
+        <path d="M20 12a8 8 0 0 1-13.7 5.6L4 16"/><path d="M4 20v-4h4"/>
+      </svg>
+      Subscriptions
+    </a>
 
-    <span class="ml-auto flex items-center gap-3 py-2 text-xs">
-      <a href="" class="text-sky-100 no-underline hover:text-white" title="Refresh pricing, stock and approval data">Reload data</a>
-      <a href="/admin/" class="text-sky-100 no-underline hover:text-white">Back-end</a>
-      <span class="text-sky-200/70">{{ request.user.name }} &middot; {{ request.user.get_role_display }}</span>
-      <a href="{% url 'core:logout' %}" class="rounded border border-sky-300/40 px-2 py-1 text-sky-100 no-underline hover:bg-sky-800">Close workspace</a>
-    </span>
+    {% if approver %}
+    <p class="hidden px-2 pb-1 pt-4 text-[0.65rem] font-semibold uppercase tracking-widest text-slate-500 md:block">Insight</p>
+
+    <a href="{% url 'core:deal_health' %}"
+       class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 no-underline
+              {% if active == 'health' %}bg-sky-500/15 font-medium text-sky-300{% else %}text-slate-400 hover:bg-slate-800 hover:text-slate-100{% endif %}">
+      <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 13h4l2.5-6 4 12L16 13h5"/>
+      </svg>
+      Deal Health
+    </a>
+
+    <a href="{% url 'core:reports' %}"
+       class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 no-underline
+              {% if active == 'reports' %}bg-sky-500/15 font-medium text-sky-300{% else %}text-slate-400 hover:bg-slate-800 hover:text-slate-100{% endif %}">
+      <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>
+      </svg>
+      Reports
+    </a>
+    {% endif %}
+  </nav>
+
+  {% comment %} The footer used to be a wrapping row of text links separated by middots, which
+     left a dangling separator and pushed "Sign out" onto its own line at this width. It is
+     now the identity block (a link to the profile page) over a fixed row of icon buttons,
+     so nothing wraps and every control has a target big enough to hit. {% endcomment %}
+  <div class="border-slate-800 px-3 pb-4 md:border-t md:pt-3">
+    <a href="{% url 'core:profile' %}"
+       class="flex items-center gap-2.5 rounded-lg px-2 py-2 no-underline
+              {% if active == 'profile' %}bg-sky-500/15{% else %}hover:bg-slate-800{% endif %}">
+      <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-700 text-xs font-semibold text-slate-100">
+        {{ request.user.name|slice:":1"|upper }}
+      </span>
+      <span class="min-w-0 leading-tight">
+        <span class="block truncate text-sm font-medium {% if active == 'profile' %}text-sky-300{% else %}text-slate-200{% endif %}">
+          {{ request.user.name }}
+        </span>
+        <span class="block text-[0.65rem] uppercase tracking-wide text-slate-500">
+          {{ request.user.get_role_display }}{% if request.user.team %} &middot; {{ request.user.team }}{% endif %}
+        </span>
+      </span>
+      <svg class="ml-auto h-4 w-4 shrink-0 text-slate-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m9 6 6 6-6 6"/>
+      </svg>
+    </a>
+
+    <div class="mt-1 flex items-center gap-1">
+      <a href="" title="Reload pricing, stock and approval data"
+         class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 no-underline hover:bg-slate-800 hover:text-sky-400">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 11A8 8 0 0 0 6.3 5.7L4 8"/><path d="M4 4v4h4"/>
+          <path d="M4 13a8 8 0 0 0 13.7 5.3L20 16"/><path d="M20 20v-4h-4"/>
+        </svg>
+        <span class="sr-only">Reload data</span>
+      </a>
+
+      {% if request.user.is_staff %}
+        <a href="/admin/" title="Back-end configuration"
+           class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 no-underline hover:bg-slate-800 hover:text-sky-400">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h10M18 18h2"/>
+            <circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="18" r="2"/>
+          </svg>
+          <span class="sr-only">Back-end</span>
+        </a>
+      {% endif %}
+
+      <button type="button" onclick="toggleTheme()" data-theme-label title="Switch theme"
+              class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-800 hover:text-sky-400">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
+        </svg>
+        <span class="sr-only">Toggle light and dark</span>
+      </button>
+
+      {% comment %} Django 5's LogoutView refuses GET, so this must be a POST form. An <a> here
+         renders a 405 error page and leaves the session signed in. {% endcomment %}
+      <form method="post" action="{% url 'core:logout' %}" class="ml-auto">{% csrf_token %}
+        <button type="submit" title="Sign out"
+                class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-rose-950 hover:text-rose-400">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>
+          </svg>
+          <span class="sr-only">Sign out</span>
+        </button>
+      </form>
+    </div>
   </div>
-</nav>
+</aside>
 {% endblock %}

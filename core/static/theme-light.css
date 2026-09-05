@@ -1,0 +1,99 @@
+/* Light theme — T-36.
+
+Generated from the classes the templates actually use, then committed. The dark theme is
+the mockup's, and stays the default; this file remaps only the surface and accent classes
+in play, so a light mode costs one stylesheet instead of a second set of templates.
+
+Specificity does the work: `.light .bg-slate-900` outranks Tailwind's `.bg-slate-900`.
+Gradients need both halves rewritten — Tailwind's `from-*` also writes
+`--tw-gradient-stops` from the original colour, so overriding `--tw-gradient-from` alone
+leaves the tile dark. The customer portal has its own base template and is untouched.
+
+Regenerate after adding templates — the generator is recorded in tasks/DONE.md (T-36). */
+
+.light{color-scheme:light}
+.light body{background-color:#f1f5f9;color:#0f172a}
+.light ::placeholder{color:#94a3b8}
+.light input,.light select,.light textarea{background-color:#ffffff;color:#0f172a}
+.light .shadow-lg,.light .shadow-md{--tw-shadow-color:rgba(15,23,42,.08)}
+.light .bg-amber-900{background-color:#fef3c7 !important}
+.light .bg-amber-950{background-color:#fef3c7 !important}
+.light .bg-amber-950\/30{background-color:#fef3c7 !important}
+.light .bg-amber-950\/40{background-color:#fef3c7 !important}
+.light .bg-emerald-900{background-color:#d1fae5 !important}
+.light .bg-emerald-950{background-color:#d1fae5 !important}
+.light .bg-emerald-950\/20{background-color:#d1fae5 !important}
+.light .bg-emerald-950\/40{background-color:#d1fae5 !important}
+.light .bg-emerald-950\/60{background-color:#d1fae5 !important}
+.light .bg-rose-900{background-color:#ffe4e6 !important}
+.light .bg-rose-950{background-color:#ffe4e6 !important}
+.light .bg-rose-950\/20{background-color:#ffe4e6 !important}
+.light .bg-rose-950\/30{background-color:#ffe4e6 !important}
+.light .bg-rose-950\/60{background-color:#ffe4e6 !important}
+.light .bg-sky-900{background-color:#e0f2fe !important}
+.light .bg-sky-950\/20{background-color:#e0f2fe !important}
+.light .bg-sky-950\/50{background-color:#e0f2fe !important}
+.light .bg-slate-700{background-color:#e2e8f0 !important}
+.light .bg-slate-700\/70{background-color:#e2e8f0 !important}
+.light .bg-slate-800{background-color:#f1f5f9 !important}
+.light .bg-slate-800\/60{background-color:#f1f5f9 !important}
+.light .bg-slate-800\/80{background-color:#f1f5f9 !important}
+.light .bg-slate-900{background-color:#ffffff !important}
+.light .bg-slate-900\/40{background-color:#ffffff !important}
+.light .bg-slate-900\/60{background-color:#ffffff !important}
+.light .bg-slate-950{background-color:#f1f5f9 !important}
+.light .bg-slate-950\/40{background-color:#f1f5f9 !important}
+.light .bg-violet-900{background-color:#ede9fe !important}
+.light .bg-violet-950{background-color:#ede9fe !important}
+.light .bg-violet-950\/40{background-color:#ede9fe !important}
+.light .border-amber-700{border-color:#fcd34d !important}
+.light .border-amber-800{border-color:#fcd34d !important}
+.light .border-amber-900\/50{border-color:#fcd34d !important}
+.light .border-amber-900\/60{border-color:#fcd34d !important}
+.light .border-emerald-800{border-color:#6ee7b7 !important}
+.light .border-emerald-900\/50{border-color:#6ee7b7 !important}
+.light .border-rose-800{border-color:#fda4af !important}
+.light .border-rose-900\/50{border-color:#fda4af !important}
+.light .border-sky-800{border-color:#7dd3fc !important}
+.light .border-sky-900\/60{border-color:#7dd3fc !important}
+.light .border-slate-700{border-color:#cbd5e1 !important}
+.light .border-slate-700\/70{border-color:#cbd5e1 !important}
+.light .border-slate-800{border-color:#e2e8f0 !important}
+.light .border-violet-700{border-color:#c4b5fd !important}
+.light .border-violet-900\/50{border-color:#c4b5fd !important}
+.light .divide-slate-800{border-color:#e2e8f0 !important}
+.light .from-amber-950\/50{--tw-gradient-from:#fffbeb !important;--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to,rgba(255,255,255,0)) !important}
+.light .from-emerald-950\/50{--tw-gradient-from:#ecfdf5 !important;--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to,rgba(255,255,255,0)) !important}
+.light .from-rose-950\/50{--tw-gradient-from:#fff1f2 !important;--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to,rgba(255,255,255,0)) !important}
+.light .from-slate-800\/70{--tw-gradient-from:#ffffff !important;--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to,rgba(255,255,255,0)) !important}
+.light .from-violet-950\/50{--tw-gradient-from:#f5f3ff !important;--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to,rgba(255,255,255,0)) !important}
+.light .text-amber-200{color:#b45309 !important}
+.light .text-amber-200\/70{color:#b45309 !important}
+.light .text-amber-200\/80{color:#b45309 !important}
+.light .text-amber-300{color:#b45309 !important}
+.light .text-amber-400{color:#b45309 !important}
+.light .text-emerald-200{color:#047857 !important}
+.light .text-emerald-200\/70{color:#047857 !important}
+.light .text-emerald-300{color:#047857 !important}
+.light .text-emerald-400{color:#047857 !important}
+.light .text-rose-100{color:#be123c !important}
+.light .text-rose-200{color:#be123c !important}
+.light .text-rose-200\/70{color:#be123c !important}
+.light .text-rose-300{color:#be123c !important}
+.light .text-rose-400{color:#be123c !important}
+.light .text-sky-200{color:#0369a1 !important}
+.light .text-sky-200\/80{color:#0369a1 !important}
+.light .text-sky-300{color:#0369a1 !important}
+.light .text-sky-400{color:#0369a1 !important}
+.light .text-slate-100{color:#0f172a !important}
+.light .text-slate-200{color:#1e293b !important}
+.light .text-slate-300{color:#334155 !important}
+.light .text-slate-400{color:#475569 !important}
+.light .text-slate-50{color:#0f172a !important}
+.light .text-slate-500{color:#64748b !important}
+.light .text-slate-600{color:#94a3b8 !important}
+.light .text-violet-200{color:#6d28d9 !important}
+.light .text-violet-200\/70{color:#6d28d9 !important}
+.light .text-violet-300{color:#6d28d9 !important}
+.light .text-violet-400{color:#6d28d9 !important}
+.light .to-slate-900{--tw-gradient-to:#ffffff !important}

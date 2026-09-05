@@ -29,11 +29,13 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from core.services import pricing, risk
+from core.services import billing, fulfilment, pricing, risk
 from core.models import (
     ApprovalChainRule,
+    Asset,
     ApprovalStep,
     AuditLog,
+    BillingScheduleEntry,
     Category,
     CategoryDiscountCeiling,
     Customer,
@@ -49,6 +51,7 @@ from core.models import (
     Quotation,
     QuotationLine,
     Role,
+    SalesSetting,
     Stock,
     SubscriptionPlan,
     User,
@@ -88,7 +91,9 @@ class Command(BaseCommand):
         self._seed_product_pairs(products)
         warehouses = self._seed_warehouses()
         self._seed_stock(products, warehouses)
+        self._seed_settings()
         quotations = self._seed_quotations(users, customers, products)
+        self._seed_history(users, customers, products)
 
         self._report(quotations)
 
@@ -96,7 +101,11 @@ class Command(BaseCommand):
 
     def _wipe(self):
         """Children before parents — several relations are PROTECT."""
+        # Assets hold PROTECT keys to lines, quotations, customers and products, so they
+        # go first or the whole wipe fails on the second run.
+        Asset.objects.all().delete()
         Payment.objects.all().delete()
+        BillingScheduleEntry.objects.all().delete()
         Invoice.objects.all().delete()
         FulfilmentAllocation.objects.all().delete()
         PortalMessage.objects.all().delete()
@@ -128,23 +137,26 @@ class Command(BaseCommand):
         backend permissions belongs to T-06, when the config models are registered.
         """
         spec = [
-            ("rep@dealflow.test", "Rita Patel", Role.REP),
-            ("manager@dealflow.test", "Marco Silva", Role.MANAGER),
-            ("finance@dealflow.test", "Farah Ng", Role.FINANCE),
-            ("admin@dealflow.test", "Alex Kim", Role.ADMIN),
-            ("rep2@dealflow.test", "Ravi Desai", Role.REP),
-            ("manager2@dealflow.test", "Mona Haddad", Role.MANAGER),
-            ("finance2@dealflow.test", "Felix Braun", Role.FINANCE),
-            ("admin2@dealflow.test", "Aisha Noor", Role.ADMIN),
+            ("rep@dealflow.test", "Rita Patel", Role.REP, "West"),
+            ("manager@dealflow.test", "Marco Silva", Role.MANAGER, "West"),
+            ("finance@dealflow.test", "Farah Ng", Role.FINANCE, ""),
+            ("admin@dealflow.test", "Alex Kim", Role.ADMIN, ""),
+            ("rep2@dealflow.test", "Ravi Desai", Role.REP, "East"),
+            ("manager2@dealflow.test", "Mona Haddad", Role.MANAGER, "East"),
+            ("finance2@dealflow.test", "Felix Braun", Role.FINANCE, ""),
+            ("admin2@dealflow.test", "Aisha Noor", Role.ADMIN, ""),
+            ("rep3@dealflow.test", "Sara Iqbal", Role.REP, "West"),
+            ("rep4@dealflow.test", "Tom Okafor", Role.REP, "East"),
         ]
         users = {}
-        for email, name, role in spec:
+        for email, name, role, team in spec:
             is_admin = role == Role.ADMIN
             user, _ = User.objects.update_or_create(
                 email=email,
                 defaults={
                     "name": name,
                     "role": role,
+                    "team": team,
                     "is_staff": is_admin,
                     "is_superuser": is_admin,
                     "is_active": True,
@@ -208,6 +220,11 @@ class Command(BaseCommand):
             ("Acme Corp", "buyer@acme.test", "Gold"),
             ("Beta Industries", "purchasing@beta.test", "Silver"),
             ("Cirrus Ltd", "ops@cirrus.test", "Bronze"),
+            ("Delta Robotics", "finance@delta.test", "Gold"),
+            ("Everline Health", "procure@everline.test", "Silver"),
+            ("Foxglove Media", "ap@foxglove.test", "Bronze"),
+            ("Granite Logistics", "buying@granite.test", "Silver"),
+            ("Harbour Analytics", "ops@harbour.test", "Gold"),
         ]
         return {
             name: Customer.objects.create(name=name, email=email, tier=tiers[tier])
@@ -218,19 +235,20 @@ class Command(BaseCommand):
         """
         MUST as of the A5 split — AC-1 requires a subscription plan to persist.
 
-        proration_method and cancellation_policy are left at UNDECIDED on purpose:
-        ADR-008 is still open, and a made-up value here would read as a decision nobody
-        took. T-20 fills them in.
+        ADR-008 is now closed, so both rule fields carry the decision rather than
+        UNDECIDED: daily pro-rata on the current period, and cancellation credits the
+        unused days of that period.
         """
+        rules = {"proration_method": "DAILY", "cancellation_policy": "CREDIT_UNUSED_DAYS"}
         return {
             "Monthly Care": SubscriptionPlan.objects.create(
-                name="Monthly Care", interval=SubscriptionPlan.Interval.MONTHLY
+                name="Monthly Care", interval=SubscriptionPlan.Interval.MONTHLY, **rules
             ),
             "Quarterly Support": SubscriptionPlan.objects.create(
-                name="Quarterly Support", interval=SubscriptionPlan.Interval.QUARTERLY
+                name="Quarterly Support", interval=SubscriptionPlan.Interval.QUARTERLY, **rules
             ),
             "Annual Platform": SubscriptionPlan.objects.create(
-                name="Annual Platform", interval=SubscriptionPlan.Interval.YEARLY
+                name="Annual Platform", interval=SubscriptionPlan.Interval.YEARLY, **rules
             ),
         }
 
@@ -249,6 +267,14 @@ class Command(BaseCommand):
             ("Care Plan 2yr", "Subscriptions", "480.00", "180.00", "month", True, "Monthly Care"),
             ("Cloud Backup 1TB", "Subscriptions", "240.00", "90.00", "month", False, "Monthly Care"),
             ("Priority Support SLA", "Subscriptions", "360.00", "140.00", "quarter", False, "Quarterly Support"),
+            ("Rugged Tablet 10", "Hardware", "680.00", "455.00", "unit", False, None),
+            ("Label Printer Z2", "Hardware", "310.00", "205.00", "unit", True, None),
+            ("Network Switch 24p", "Hardware", "540.00", "360.00", "unit", False, None),
+            ("Conference Camera", "Hardware", "820.00", "560.00", "unit", False, None),
+            ("Security Audit", "Services", "2400.00", "1450.00", "engagement", False, None),
+            ("Custom Integration", "Services", "3200.00", "2050.00", "engagement", True, None),
+            ("Platform Licence", "Subscriptions", "1200.00", "430.00", "year", False, "Annual Platform"),
+            ("Analytics Add-on", "Subscriptions", "300.00", "115.00", "month", False, "Monthly Care"),
         ]
         products = {}
         for name, category, price, cost, unit, promoted, plan in spec:
@@ -272,6 +298,13 @@ class Command(BaseCommand):
             ("Laptop Pro 14", "Memory", "32 GB", "180.00"),
             ('27" 4K Monitor', "Stand", "Fixed", "0.00"),
             ('27" 4K Monitor', "Stand", "Height adjustable", "45.00"),
+            ("Rugged Tablet 10", "Storage", "64 GB", "0.00"),
+            ("Rugged Tablet 10", "Storage", "128 GB", "90.00"),
+            ("Rugged Tablet 10", "Storage", "256 GB", "210.00"),
+            ("Network Switch 24p", "Uplink", "Copper", "0.00"),
+            ("Network Switch 24p", "Uplink", "Fibre SFP+", "160.00"),
+            ("Conference Camera", "Field of view", "90 degrees", "0.00"),
+            ("Conference Camera", "Field of view", "120 degrees", "75.00"),
         ]
         for product, attribute, value, extra in spec:
             ProductVariant.objects.create(
@@ -291,7 +324,7 @@ class Command(BaseCommand):
                     product=product,
                     tier=tiers[tier_name],
                     price=_money(product.list_price * factor),
-                    currency="EUR",
+                    currency="INR",
                 )
 
     def _seed_product_pairs(self, products):
@@ -320,6 +353,9 @@ class Command(BaseCommand):
             "East Depot": Warehouse.objects.create(
                 name="East Depot", shipping_cost_weight=Decimal("1.40")
             ),
+            "North Hub": Warehouse.objects.create(
+                name="North Hub", shipping_cost_weight=Decimal("1.75")
+            ),
         }
 
     def _seed_stock(self, products, warehouses):
@@ -335,15 +371,42 @@ class Command(BaseCommand):
         """
         main = warehouses["Main Warehouse"]
         east = warehouses["East Depot"]
+        north = warehouses["North Hub"]
+        # name, Main, East, North, reorder point
         spec = [
-            ("Laptop Pro 14", 4, 10),  # <- the split trigger. Do not "tidy" this.
-            ("Docking Station X3", 25, 12),
-            ('27" 4K Monitor', 18, 6),
-            ("Wireless Headset Duo", 40, 15),
+            ("Laptop Pro 14", 4, 10, 3, 5),  # <- the split trigger. Do not "tidy" this.
+            ("Docking Station X3", 25, 12, 8, 10),
+            ('27" 4K Monitor', 18, 6, 4, 8),
+            ("Wireless Headset Duo", 40, 15, 20, 12),
+            ("Rugged Tablet 10", 2, 3, 1, 6),      # below reorder point on every site
+            ("Label Printer Z2", 14, 5, 0, 6),
+            ("Network Switch 24p", 9, 2, 5, 4),
+            ("Conference Camera", 3, 0, 2, 5),     # thin, so a large order backorders
         ]
-        for name, main_qty, east_qty in spec:
-            Stock.objects.create(product=products[name], warehouse=main, qty_on_hand=main_qty)
-            Stock.objects.create(product=products[name], warehouse=east, qty_on_hand=east_qty)
+        for name, main_qty, east_qty, north_qty, reorder in spec:
+            for warehouse, qty in ((main, main_qty), (east, east_qty), (north, north_qty)):
+                Stock.objects.create(
+                    product=products[name], warehouse=warehouse,
+                    qty_on_hand=qty, reorder_point=reorder,
+                )
+
+    def _seed_settings(self):
+        """ADR-007. The thresholds the deal health dashboard reads.
+
+        Left at the documented defaults rather than tuned to make the demo data look
+        alarming: the seeded history below is what produces the alerts, so the numbers
+        here stay defensible.
+        """
+        setting = SalesSetting.load()
+        setting.stall_days = 7
+        setting.anomaly_window_days = 90
+        setting.anomaly_threshold_pct = Decimal("10.00")
+        setting.delivery_promise_days = 5
+        setting.currency_code = "INR"
+        setting.currency_symbol = "\u20b9"
+        setting.currency_rate = Decimal("1.000000")
+        setting.save()
+        return setting
 
     # ----------------------------------------------------------------- quotations
 
@@ -506,6 +569,132 @@ class Command(BaseCommand):
 
         return made
 
+    def _seed_history(self, users, customers, products):
+        """Volume and history, so the analytics screens have something true to say.
+
+        Three things are seeded deliberately rather than incidentally:
+
+        * **A rep's discount baseline.** Sara Iqbal writes many small discounts and then
+          one very large one, so `health.discount_anomalies()` has a real average to
+          measure against. Without a baseline every rep is unremarkable and the panel is
+          honestly, but uselessly, empty.
+        * **Stalled deals.** Several quotations are backdated past the 7-day window.
+        * **Delivery slippage.** One confirmed order carries a promise date in the past
+          with its stock still on backorder.
+        """
+        rep = users["rep@dealflow.test"]
+        rep2 = users["rep2@dealflow.test"]
+        sara = users["rep3@dealflow.test"]
+        tom = users["rep4@dealflow.test"]
+
+        delta = customers["Delta Robotics"]
+        everline = customers["Everline Health"]
+        foxglove = customers["Foxglove Media"]
+        granite = customers["Granite Logistics"]
+        harbour = customers["Harbour Analytics"]
+
+        laptop = products["Laptop Pro 14"]
+        dock = products["Docking Station X3"]
+        monitor = products['27" 4K Monitor']
+        headset = products["Wireless Headset Duo"]
+        tablet = products["Rugged Tablet 10"]
+        printer = products["Label Printer Z2"]
+        switch = products["Network Switch 24p"]
+        camera = products["Conference Camera"]
+        setup = products["Onsite Setup Service"]
+        training = products["Admin Training Day"]
+        audit = products["Security Audit"]
+        care = products["Care Plan 2yr"]
+        backup = products["Cloud Backup 1TB"]
+        licence = products["Platform Licence"]
+        analytics = products["Analytics Add-on"]
+
+        # number, customer, rep, stage, lines, days idle
+        spec = [
+            ("Q-2026-0006", harbour, rep2, Quotation.Stage.SENT,
+             [(laptop, 3, "8.00"), (dock, 3, "5.00")], 2),
+            ("Q-2026-0007", granite, rep2, Quotation.Stage.DRAFT,
+             [(switch, 2, "0.00"), (printer, 4, "4.00")], 1),
+            ("Q-2026-0008", foxglove, tom, Quotation.Stage.PAID,
+             [(monitor, 6, "3.00"), (headset, 10, "2.00")], 34),
+            ("Q-2026-0009", everline, tom, Quotation.Stage.INVOICED,
+             [(tablet, 4, "6.00"), (training, 2, "5.00")], 12),
+            ("Q-2026-0010", delta, rep, Quotation.Stage.REJECTED,
+             [(audit, 1, "22.00")], 26),
+            ("Q-2026-0011", harbour, rep2, Quotation.Stage.APPROVED,
+             [(licence, 1, "6.00"), (setup, 1, "8.00")], 3),
+            ("Q-2026-0012", granite, tom, Quotation.Stage.SENT,
+             [(camera, 2, "4.00"), (analytics, 3, "3.00")], 19),
+            ("Q-2026-0013", foxglove, rep, Quotation.Stage.PENDING_APPROVAL,
+             [(setup, 2, "16.00"), (laptop, 1, "9.00")], 4),
+            ("Q-2026-0014", delta, rep2, Quotation.Stage.PAID,
+             [(dock, 8, "5.00"), (backup, 4, "2.00")], 41),
+            ("Q-2026-0015", everline, rep, Quotation.Stage.UNDER_NEGOTIATION,
+             [(monitor, 5, "9.00"), (care, 2, "4.00")], 9),
+        ]
+        for number, customer, owner, stage, lines, idle in spec:
+            self._build(number, customer, owner, stage, lines, days_idle=idle)
+
+        # Sara's baseline: eight quiet deals at 2-4%, so her average is genuinely low.
+        for index in range(8):
+            self._build(
+                f"Q-2026-01{index + 20}",
+                [delta, everline, foxglove, granite][index % 4],
+                sara,
+                Quotation.Stage.PAID,
+                [(headset, 4 + index, "2.00"), (dock, 2, "3.00")],
+                days_idle=45 + index * 3,
+            )
+
+        # ...and the one that breaks the pattern. This is the anomaly the dashboard finds.
+        self._build(
+            "Q-2026-0130", harbour, sara, Quotation.Stage.PENDING_APPROVAL,
+            [(laptop, 2, "34.00"), (monitor, 2, "4.00")], days_idle=1,
+        )
+
+        # A hybrid order with a live billing schedule, so B7 is populated on arrival.
+        hybrid = self._build(
+            "Q-2026-0140", harbour, rep, Quotation.Stage.CONFIRMED,
+            [(laptop, 1, "5.00"), (care, 3, "4.00"), (analytics, 2, "0.00")], days_idle=2,
+        )
+        billing.on_order_confirmed(hybrid)
+
+        # A confirmed order past its promise with stock still short — delivery slippage.
+        late = self._build(
+            "Q-2026-0150", granite, rep2, Quotation.Stage.CONFIRMED,
+            [(camera, 9, "3.00")], days_idle=11,
+        )
+        late.promised_delivery_date = (self.now - timedelta(days=4)).date()
+        late.save(update_fields=["promised_delivery_date"])
+        try:
+            fulfilment.accept_split(late, rep2)
+        except Exception:  # pragma: no cover - seed is best-effort on the split
+            pass
+
+        # ADR-013. Assets, so "what does this customer own" and the renewals queue have
+        # something true to show. Orders that were already closed when the asset model
+        # arrived get theirs written directly; the terms are then spread across the next
+        # few months so the queue is not either empty or entirely overdue.
+        from core.models import Asset
+        from core.services import assets as asset_service
+
+        for quotation in Quotation.objects.filter(
+            stage__in=[
+                Quotation.Stage.CONFIRMED, Quotation.Stage.FULFILLED,
+                Quotation.Stage.INVOICED, Quotation.Stage.PAID,
+            ]
+        ):
+            asset_service.create_from_confirmation(quotation)
+
+        # Stagger the terms: two already lapsed, the rest inside 20 to 200 days.
+        offsets = [-18, -4, 12, 26, 45, 70, 110, 160, 200]
+        recurring = list(
+            Asset.objects.filter(end_date__isnull=False).order_by("id")
+        )
+        for index, asset in enumerate(recurring):
+            asset.end_date = (self.now + timedelta(days=offsets[index % len(offsets)])).date()
+            asset.save(update_fields=["end_date"])
+
     # ----------------------------------------------------------------- report
 
     def _report(self, quotations):
@@ -524,6 +713,10 @@ class Command(BaseCommand):
         out.write(f"  Warehouses       {Warehouse.objects.count()}")
         out.write(f"  Stock rows       {Stock.objects.count()}")
         out.write(f"  Quotations       {Quotation.objects.count()}")
+        out.write(f"  Variants         {ProductVariant.objects.count()}")
+        out.write(f"  Billing entries  {BillingScheduleEntry.objects.count()}")
+        out.write(f"  Invoices         {Invoice.objects.count()}")
+        out.write(f"  Assets           {Asset.objects.count()}")
         out.write("")
 
         laptop = Product.objects.get(name="Laptop Pro 14")

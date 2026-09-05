@@ -72,7 +72,7 @@ def _candidates(quotation):
     counts = {}
     pairs = ProductPair.objects.filter(product_a_id__in=on_quote).select_related(
         "product_b__category", "product_b__subscription_plan"
-    )
+    ).prefetch_related("product_b__price_entries")
     for pair in pairs:
         counts[pair.product_b] = max(
             counts.get(pair.product_b, 0), pair.co_purchase_count
@@ -80,7 +80,7 @@ def _candidates(quotation):
 
     pairs = ProductPair.objects.filter(product_b_id__in=on_quote).select_related(
         "product_a__category", "product_a__subscription_plan"
-    )
+    ).prefetch_related("product_a__price_entries")
     for pair in pairs:
         counts[pair.product_a] = max(
             counts.get(pair.product_a, 0), pair.co_purchase_count

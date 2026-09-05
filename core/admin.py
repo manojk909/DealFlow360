@@ -50,6 +50,8 @@ from core.models import (
     Product,
     ProductPair,
     ProductVariant,
+    SalesSetting,
+    Asset,
     Quotation,
     QuotationLine,
     Stock,
@@ -96,15 +98,15 @@ class UserAdmin(BaseUserAdmin):
     form = DealFlowUserChangeForm
     model = User
 
-    list_display = ("email", "name", "role", "is_active", "is_staff", "created_at")
-    list_filter = ("role", "is_active", "is_staff")
+    list_display = ("email", "name", "role", "team", "is_active", "is_staff", "created_at")
+    list_filter = ("role", "team", "is_active", "is_staff")
     search_fields = ("email", "name")
     ordering = ("email",)
     readonly_fields = ("created_at", "last_login")
 
     fieldsets = (
         (None, {"fields": ("email", "password")}),
-        ("Identity", {"fields": ("name", "role")}),
+        ("Identity", {"fields": ("name", "role", "team")}),
         ("Permissions", {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")}),
         ("Dates", {"fields": ("last_login", "created_at")}),
     )
@@ -463,7 +465,10 @@ class WarehouseAdmin(admin.ModelAdmin):
 
 @admin.register(Stock)
 class StockAdmin(admin.ModelAdmin):
-    list_display = ("product", "warehouse", "qty_on_hand", "qty_reserved", "qty_available_display")
+    list_display = (
+        "product", "warehouse", "qty_on_hand", "qty_reserved", "qty_available_display",
+        "reorder_point",
+    )
     list_filter = ("warehouse", "product__category")
     search_fields = ("product__name", "warehouse__name")
     list_select_related = ("product", "warehouse")
@@ -556,3 +561,58 @@ class PaymentAdmin(ReadOnlyAdmin):
     search_fields = ("invoice__number", "invoice__quotation__number")
     list_select_related = ("invoice",)
     date_hierarchy = "paid_at"
+
+
+@admin.register(SalesSetting)
+class SalesSettingAdmin(admin.ModelAdmin):
+    """ADR-007. The thresholds the deal health dashboard reads, as one editable row.
+
+    The PDF calls these "configured", so they are a row rather than constants — change
+    the stall window here and the dashboard moves with it, live.
+    """
+
+    list_display = (
+        "currency_code", "currency_symbol", "currency_rate",
+        "stall_days", "anomaly_window_days", "anomaly_threshold_pct", "delivery_promise_days",
+    )
+    fieldsets = (
+        ("Currency (ADR-012)", {
+            "fields": ("currency_code", "currency_symbol", "currency_rate"),
+            "description": (
+                "Amounts are stored in the base currency and multiplied by the rate on "
+                "display. A rate of 1.000000 changes only the symbol."
+            ),
+        }),
+        ("Deal health thresholds (ADR-007)", {
+            "fields": (
+                "stall_days", "anomaly_window_days", "anomaly_threshold_pct",
+                "delivery_promise_days",
+            ),
+        }),
+    )
+
+    def has_add_permission(self, request):
+        """Singleton: the row is created on first read, never added by hand."""
+        return not SalesSetting.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Asset)
+class AssetAdmin(admin.ModelAdmin):
+    """ADR-013. Read-mostly: assets are written by the confirmation hook, not by hand.
+
+    Registered so the chain is inspectable — every asset names the line it came from — but
+    adding one here would create something nobody bought, so that is closed off.
+    """
+
+    list_display = ("customer", "product", "qty", "status", "start_date", "end_date", "mrr")
+    list_filter = ("status", "product__category", "customer__tier")
+    search_fields = ("customer__name", "product__name", "quotation__number")
+    list_select_related = ("customer", "product")
+    autocomplete_fields = ("customer", "product")
+    readonly_fields = ("source_line", "quotation", "created_at")
+
+    def has_add_permission(self, request):
+        return False

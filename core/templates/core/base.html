@@ -12,11 +12,41 @@
     ADR-001 chose CDN tags for speed of setup; vendoring them costs two files and removes
     the only network dependency the application had.
   {% endcomment %}
+  <link rel="stylesheet" href="{% static 'theme-light.css' %}">
   <script src="{% static 'vendor/tailwind.js' %}"></script>
+
+  {% comment %} Applied before first paint so a light-mode user never sees a dark flash.
+     The choice is per-browser and belongs to the viewer, so localStorage, not a column. {% endcomment %}
+  <script>
+    try {
+      if (localStorage.getItem("dealflow-theme") === "light") {
+        document.documentElement.classList.add("light");
+      }
+    } catch (e) { /* private mode: stay on the dark default */ }
+  </script>
   <script src="{% static 'vendor/htmx.min.js' %}" defer></script>
 
   {% comment %} Minimal fallback so the app is still legible if the CDN is unreachable.
      Odoo's guidance is to plan for offline operation; see the note in tasks/BACKLOG.md. {% endcomment %}
+  <script>
+    function setTheme(mode) {
+      var light = mode === "light";
+      document.documentElement.classList.toggle("light", light);
+      try { localStorage.setItem("dealflow-theme", light ? "light" : "dark"); } catch (e) {}
+      // Write the label to `title` and the screen-reader span, never to textContent:
+      // the button's only visible child is an SVG, and setting textContent deleted it.
+      document.querySelectorAll("[data-theme-label]").forEach(function (el) {
+        var label = light ? "Switch to dark mode" : "Switch to light mode";
+        el.setAttribute("title", label);
+        var sr = el.querySelector(".sr-only");
+        if (sr) { sr.textContent = label; }
+      });
+    }
+    function toggleTheme() {
+      setTheme(document.documentElement.classList.contains("light") ? "dark" : "light");
+    }
+  </script>
+
   <style>
     :root { color-scheme: dark; }
     body { background:#0b1120; color:#e2e8f0;
@@ -26,6 +56,7 @@
 </head>
 <body class="h-full bg-slate-950 text-slate-200 antialiased">
 
+  {% block topbar %}
   <header class="border-b border-slate-800 bg-slate-900/60">
     <div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
       <a href="{% url 'core:health' %}" class="flex items-baseline gap-2 no-underline">
@@ -37,17 +68,27 @@
       </nav>
     </div>
   </header>
+  {% endblock %}
 
-  {# Full-width chrome, used by the workspace for its tab bar. #}
+  {# Full-width chrome. The workspace replaces it with a fixed sidebar. #}
   {% block chrome %}{% endblock %}
 
   <main class="{% block main_class %}mx-auto max-w-5xl px-4 py-8{% endblock %}">
     {% block content %}{% endblock %}
   </main>
 
-  <footer class="mx-auto max-w-5xl px-4 pb-10 text-xs text-slate-600">
-    Team 317 · Odoo Hackathon 2026
-  </footer>
+  {% comment %} HTMX drops the response body of any non-2xx by default, so a validation
+     refusal (400) or a locked-stage refusal (409) swapped nothing and the user saw the
+     rejected value sitting in the field with no explanation. Those two responses carry a
+     freshly rendered live region with its error banner, so let them swap. {% endcomment %}
+  <script>
+    document.body.addEventListener("htmx:beforeSwap", function (event) {
+      if (event.detail.xhr.status === 400 || event.detail.xhr.status === 409) {
+        event.detail.shouldSwap = true;
+        event.detail.isError = false;
+      }
+    });
+  </script>
 
 </body>
 </html>

@@ -1,0 +1,49 @@
+{% load money %}
+{% comment %} T-36 tile row. Every figure is derived in the view from the same list the board
+   below is built from, so a tile can never disagree with the columns under it. {% endcomment %}
+<div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+
+  <div class="rounded-xl border border-slate-800 bg-gradient-to-br from-slate-800/70 to-slate-900 p-4 shadow-lg shadow-black/20">
+    <div class="flex items-start justify-between gap-2">
+      <span class="text-xs font-medium text-slate-400">Open quotations</span>
+      <svg class="h-4 w-4 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>
+      </svg>
+    </div>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-slate-50">{{ open_count }}</p>
+    <p class="mt-1 text-xs text-slate-500">of {{ total_count }} in the system</p>
+  </div>
+
+  <div class="rounded-xl border border-amber-900/50 bg-gradient-to-br from-amber-950/50 to-slate-900 p-4 shadow-lg shadow-black/20">
+    <div class="flex items-start justify-between gap-2">
+      <span class="text-xs font-medium text-amber-200/70">Waiting on an approver</span>
+      <svg class="h-4 w-4 text-amber-500/70" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/><path d="M12 7.5v5l3 2"/>
+      </svg>
+    </div>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-amber-300">{{ pending_count }}</p>
+    <p class="mt-1 text-xs text-slate-500">routed here by the score, not by a rep</p>
+  </div>
+
+  <div class="rounded-xl border border-rose-900/50 bg-gradient-to-br from-rose-950/50 to-slate-900 p-4 shadow-lg shadow-black/20">
+    <div class="flex items-start justify-between gap-2">
+      <span class="text-xs font-medium text-rose-200/70">Over ceiling</span>
+      <svg class="h-4 w-4 text-rose-500/70" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/>
+      </svg>
+    </div>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-rose-300">{{ flagged_count }}</p>
+    <p class="mt-1 text-xs text-slate-500">{{ flagged_value|money }} of exposed value</p>
+  </div>
+
+  <div class="rounded-xl border border-emerald-900/50 bg-gradient-to-br from-emerald-950/50 to-slate-900 p-4 shadow-lg shadow-black/20">
+    <div class="flex items-start justify-between gap-2">
+      <span class="text-xs font-medium text-emerald-200/70">Open pipeline value</span>
+      <svg class="h-4 w-4 text-emerald-500/70" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 17 9.5 11l3.5 3.5L20 7"/><path d="M15 7h5v5"/>
+      </svg>
+    </div>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-emerald-300">{{ open_value|money:0 }}</p>
+    <p class="mt-1 text-xs text-slate-500">excludes confirmed and closed</p>
+  </div>
+</div>

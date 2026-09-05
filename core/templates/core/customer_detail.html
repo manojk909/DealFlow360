@@ -1,0 +1,113 @@
+{% extends "core/workspace_base.html" %}
+{% load money %}
+{% block title %}{{ customer.name }} &middot; DealFlow360{% endblock %}
+
+{% block content %}
+<a href="{% url 'core:customer_list' %}" class="text-sm text-slate-500 no-underline hover:text-sky-400">&larr; Customers</a>
+
+<div class="mt-2 flex flex-wrap items-center gap-4">
+  <span class="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-sky-600 text-lg font-semibold text-white">
+    {{ customer.name|slice:":1"|upper }}
+  </span>
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight text-slate-50">{{ customer.name }}</h1>
+    <p class="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-slate-400">
+      <span class="rounded-full border border-slate-700 px-2 py-0.5 text-xs text-slate-300">
+        {{ customer.tier.name }} &middot; ceiling {{ customer.tier.max_discount_pct|floatformat:0 }}%
+      </span>
+      <span>{{ customer.email }}</span>
+    </p>
+  </div>
+</div>
+
+<div class="mt-5 grid gap-3 sm:grid-cols-3">
+  <div class="rounded-xl border border-emerald-900/50 bg-gradient-to-br from-emerald-950/50 to-slate-900 p-4">
+    <span class="text-xs font-medium text-emerald-200/70">Monthly recurring revenue</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-emerald-300">{{ summary.mrr|money }}</p>
+  </div>
+  <div class="rounded-xl border border-sky-900/60 bg-gradient-to-br from-sky-950/50 to-slate-900 p-4">
+    <span class="text-xs font-medium text-sky-200/70">Annual run rate</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-sky-300">{{ summary.arr|money:0 }}</p>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <span class="text-xs font-medium text-slate-400">Active assets</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-slate-50">{{ active_assets|length }}</p>
+  </div>
+</div>
+
+<section class="mt-6">
+  <h2 class="text-xs font-semibold uppercase tracking-widest text-slate-400">What they own</h2>
+  <p class="mt-0.5 text-xs text-slate-500">
+    Written when an order is confirmed. A one-time purchase has no end date &mdash; owning
+    hardware does not expire.
+  </p>
+  <div class="mt-2 overflow-x-auto rounded-xl border border-slate-800">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-800/60 text-left text-[0.68rem] uppercase tracking-wide text-slate-400">
+        <tr>
+          <th class="px-4 py-2.5">Product</th><th class="px-4 py-2.5 text-right">Qty</th>
+          <th class="px-4 py-2.5">From</th><th class="px-4 py-2.5">Term ends</th>
+          <th class="px-4 py-2.5 text-right">MRR</th><th class="px-4 py-2.5">Status</th>
+          <th class="px-4 py-2.5">Origin</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-800 bg-slate-900">
+        {% for asset in assets %}
+          <tr class="{% if asset.status != 'ACTIVE' %}opacity-60{% endif %}">
+            <td class="px-4 py-2.5 text-slate-200">{{ asset.product.name }}
+              <span class="block text-xs text-slate-600">{{ asset.product.category.name }}</span></td>
+            <td class="px-4 py-2.5 text-right tabular-nums text-slate-300">{{ asset.qty }}</td>
+            <td class="px-4 py-2.5 text-slate-400">{{ asset.start_date }}</td>
+            <td class="px-4 py-2.5 text-slate-400">
+              {% if asset.end_date %}{{ asset.end_date }}{% else %}<span class="text-slate-600">perpetual</span>{% endif %}
+            </td>
+            <td class="px-4 py-2.5 text-right tabular-nums {% if asset.mrr %}text-emerald-400{% else %}text-slate-600{% endif %}">
+              {{ asset.mrr|money }}
+            </td>
+            <td class="px-4 py-2.5">
+              <span class="rounded px-1.5 py-0.5 text-[0.7rem] font-medium
+                {% if asset.status == 'ACTIVE' %}bg-emerald-900 text-emerald-200
+                {% elif asset.status == 'RENEWED' %}bg-sky-900 text-sky-200
+                {% elif asset.status == 'EXPIRED' %}bg-amber-900 text-amber-200
+                {% else %}bg-rose-900 text-rose-200{% endif %}">{{ asset.get_status_display }}</span>
+            </td>
+            <td class="px-4 py-2.5">
+              <a href="{% url 'core:quotation_builder' asset.quotation.pk %}"
+                 class="text-xs text-sky-400 no-underline hover:underline">{{ asset.quotation.number }}</a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="px-4 py-10 text-center text-slate-600">
+            Nothing owned yet &mdash; assets appear when an order is confirmed.
+          </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="mt-6">
+  <h2 class="text-xs font-semibold uppercase tracking-widest text-slate-400">Quotation history</h2>
+  <div class="mt-2 overflow-x-auto rounded-xl border border-slate-800">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-800/60 text-left text-[0.68rem] uppercase tracking-wide text-slate-400">
+        <tr><th class="px-4 py-2.5">Number</th><th class="px-4 py-2.5">Rep</th>
+            <th class="px-4 py-2.5">Stage</th><th class="px-4 py-2.5 text-right">Risk</th>
+            <th class="px-4 py-2.5 text-right">Total</th></tr>
+      </thead>
+      <tbody class="divide-y divide-slate-800 bg-slate-900">
+        {% for q in quotations %}
+          <tr>
+            <td class="px-4 py-2.5"><a href="{% url 'core:quotation_builder' q.pk %}"
+              class="text-sky-400 no-underline hover:underline">{{ q.number }}</a></td>
+            <td class="px-4 py-2.5 text-slate-400">{{ q.rep.name }}</td>
+            <td class="px-4 py-2.5 text-slate-400">{{ q.get_stage_display }}</td>
+            <td class="px-4 py-2.5 text-right tabular-nums {% if q.risk_score > 0 %}text-rose-400{% else %}text-slate-500{% endif %}">{{ q.risk_score }}</td>
+            <td class="px-4 py-2.5 text-right tabular-nums text-slate-100">{{ q.total|money }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

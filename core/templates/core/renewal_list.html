@@ -1,0 +1,103 @@
+{% extends "core/workspace_base.html" %}
+{% load money %}
+{% block title %}Renewals &middot; DealFlow360{% endblock %}
+
+{% comment %} ADR-013. The queue assets exist for: contracts running out, grouped by account,
+   with one button that raises a priced draft renewal. Priced at today's price list, not the
+   original order's — a renewal is a new agreement, and carrying an old price forward
+   silently is how margin leaks. {% endcomment %}
+
+{% block content %}
+<div class="flex flex-wrap items-end justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight text-slate-50">Renewals</h1>
+    <p class="mt-1 text-sm text-slate-400">
+      Contracts ending inside {{ within }} days, and everything already lapsed. Raising a
+      renewal prices it at today&rsquo;s price list.
+    </p>
+  </div>
+  <form method="get" class="flex items-end gap-2">
+    <label class="text-xs text-slate-400">Window
+      <select name="within" class="mt-1 rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100">
+        <option value="30" {% if within == 30 %}selected{% endif %}>30 days</option>
+        <option value="60" {% if within == 60 %}selected{% endif %}>60 days</option>
+        <option value="90" {% if within == 90 %}selected{% endif %}>90 days</option>
+        <option value="180" {% if within == 180 %}selected{% endif %}>180 days</option>
+        <option value="365" {% if within == 365 %}selected{% endif %}>1 year</option>
+      </select>
+    </label>
+    <button type="submit" class="rounded bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-500">Apply</button>
+  </form>
+</div>
+
+<div class="mt-5 grid gap-3 sm:grid-cols-3">
+  <div class="rounded-xl border border-amber-900/50 bg-gradient-to-br from-amber-950/50 to-slate-900 p-4">
+    <span class="text-xs font-medium text-amber-200/70">MRR up for renewal</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-amber-300">{{ at_risk_mrr|money:0 }}</p>
+    <p class="mt-1 text-xs text-slate-500">revenue that lapses if nobody acts</p>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <span class="text-xs font-medium text-slate-400">Accounts affected</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-slate-50">{{ rows|length }}</p>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <span class="text-xs font-medium text-slate-400">Window</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-slate-50">{{ within }}<span class="text-lg text-slate-500"> days</span></p>
+  </div>
+</div>
+
+<div class="mt-6 space-y-3">
+  {% for row in rows %}
+    <section class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <a href="{% url 'core:customer_detail' row.customer.pk %}"
+             class="text-lg font-semibold text-slate-100 no-underline hover:text-sky-400">{{ row.customer.name }}</a>
+          <p class="mt-0.5 text-xs text-slate-500">
+            {{ row.assets|length }} contract{{ row.assets|length|pluralize }} &middot;
+            {{ row.mrr|money }} per month &middot;
+            {% if row.soonest < today %}
+              <span class="font-semibold text-rose-400">lapsed {{ row.soonest }}</span>
+            {% else %}
+              first ends {{ row.soonest }}
+            {% endif %}
+          </p>
+        </div>
+        <form method="post" action="{% url 'core:renewal_create' row.customer.pk %}">
+          {% csrf_token %}
+          <input type="hidden" name="within" value="{{ within }}">
+          <button type="submit"
+                  class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 12a8 8 0 0 1 13.7-5.6L20 8"/><path d="M20 4v4h-4"/>
+              <path d="M20 12a8 8 0 0 1-13.7 5.6L4 16"/><path d="M4 20v-4h4"/>
+            </svg>
+            Raise renewal quote
+          </button>
+        </form>
+      </div>
+
+      <div class="mt-3 overflow-x-auto rounded-lg border border-slate-800">
+        <table class="w-full text-sm">
+          <tbody class="divide-y divide-slate-800 bg-slate-950/40">
+            {% for asset in row.assets %}
+              <tr>
+                <td class="px-3 py-2 text-slate-200">{{ asset.qty }} &times; {{ asset.product.name }}</td>
+                <td class="px-3 py-2 text-xs text-slate-500">from {{ asset.quotation.number }}</td>
+                <td class="px-3 py-2 text-right text-xs {% if asset.end_date < today %}font-semibold text-rose-400{% else %}text-slate-400{% endif %}">
+                  ends {{ asset.end_date }}
+                </td>
+                <td class="px-3 py-2 text-right tabular-nums text-emerald-400">{{ asset.mrr|money }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% empty %}
+    <p class="rounded-xl border border-slate-800 bg-slate-900 px-4 py-10 text-center text-slate-600">
+      Nothing is up for renewal inside {{ within }} days.
+    </p>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -142,10 +142,27 @@ class Quotation(models.Model):
     # Drives the stalled-deal detector (BR-8). Updated on every state-changing action —
     # deliberately NOT auto_now, because the dashboard is meaningless if an unrelated
     # write silently refreshes it.
+    # ADR-007. The PDF asks for "delivery promise slippage" without naming a promise
+    # anywhere, so one is set at confirmation: today + SalesSetting.delivery_promise_days.
+    promised_delivery_date = models.DateField(null=True, blank=True)
     last_activity_at = models.DateTimeField()
 
     class Meta:
         ordering = ["-created_at", "-id"]
+        # Indexes chosen from the query log of the real list screens, not sprinkled: each
+        # one backs a filter or an ordering that a page actually issues. SQLite and
+        # PostgreSQL both use them; on 26 rows they are invisible, which is the point of
+        # adding them before the row count makes them urgent.
+        indexes = [
+            # Every board, list and report filters on stage and orders by activity.
+            models.Index(fields=["stage", "-last_activity_at"], name="quote_stage_activity_idx"),
+            # Deal health scans open quotations by idle time.
+            models.Index(fields=["last_activity_at"], name="quote_activity_idx"),
+            # Reports filter by rep over a period.
+            models.Index(fields=["rep", "-created_at"], name="quote_rep_created_idx"),
+            # Delivery slippage reads promised dates in the past.
+            models.Index(fields=["promised_delivery_date"], name="quote_promised_idx"),
+        ]
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(order_discount_pct__gte=0)

@@ -186,14 +186,17 @@ class PaymentTests(BillingTestCase):
         self.assertEqual("PAID", entry.payload["status"])
 
 
-class StillStubbedTests(BillingTestCase):
-    """T-20 and ADR-008 work must stay unimplemented, not quietly guessed."""
+class ScheduleIsLiveNowTests(BillingTestCase):
+    """T-20 shipped and ADR-008 is closed, so these are no longer stubs.
 
-    def test_schedule_and_proration_remain_stubs(self):
-        for call in (
-            lambda: billing.build_billing_schedule(self.quotation),
-            lambda: billing.upcoming_schedule(self.quotation),
-            lambda: billing.prorate_quantity_change(None, 2, None),
-        ):
-            with self.assertRaises(NotImplementedError):
-                call()
+    This class used to assert the opposite — that the three functions still raised
+    `NotImplementedError` — which was the right test while the decision was open. The
+    behaviour they now have is covered in `test_subscriptions_and_health.py`; what is
+    asserted here is only that a quotation with no recurring lines gets no schedule, so
+    a pure one-time order is untouched by any of it.
+    """
+
+    def test_an_order_with_no_recurring_lines_gets_no_schedule(self):
+        self.assertEqual([], billing.build_billing_schedule(self.quotation))
+        self.assertEqual([], billing.upcoming_schedule(self.quotation))
+        self.assertEqual(0, self.quotation.billing_schedule.count())

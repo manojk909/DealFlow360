@@ -1,0 +1,74 @@
+{% extends "core/workspace_base.html" %}
+{% load money %}
+{% block title %}Pipeline &middot; DealFlow360{% endblock %}
+
+{% block content %}
+<div class="flex flex-wrap items-end justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight text-slate-50">Pipeline</h1>
+    <p class="mt-1 text-sm text-slate-400">
+      Deals by stage. Select a card to open the builder.
+    </p>
+  </div>
+</div>
+
+{% include "core/partials/pipeline_tiles.html" %}
+
+<div class="mt-6 flex snap-x gap-3 overflow-x-auto pb-4">
+  {% for column in board_columns %}
+    <section class="w-64 max-w-[85vw] shrink-0 snap-start">
+      <header class="flex items-center justify-between rounded-t-xl border border-slate-800 border-b-0 px-3 py-2.5
+                     {% if column.stage == 'PENDING_APPROVAL' %}bg-amber-950/40
+                     {% elif column.stage == 'APPROVED' %}bg-emerald-950/40
+                     {% elif column.stage == 'UNDER_NEGOTIATION' %}bg-violet-950/40
+                     {% elif column.stage == 'CLOSED' %}bg-slate-900
+                     {% else %}bg-slate-800/60{% endif %}">
+        <div class="min-w-0">
+          <h2 class="truncate text-xs font-semibold uppercase tracking-wide text-slate-300">{{ column.label }}</h2>
+          <p class="text-[0.7rem] tabular-nums text-slate-500">{{ column.value|money:0 }}</p>
+        </div>
+        <span class="ml-2 shrink-0 rounded-full bg-slate-800 px-2 py-0.5 text-xs tabular-nums text-slate-400">
+          {{ column.quotations|length }}
+        </span>
+      </header>
+
+      <div class="min-h-[8rem] space-y-2 rounded-b-xl border border-t-0 border-slate-800 bg-slate-900/40 p-2">
+        {% for q in column.quotations %}
+          <a href="{% url 'core:quotation_builder' q.pk %}"
+             class="block rounded-lg border border-slate-700/70 bg-slate-800/80 p-3 no-underline shadow-md shadow-black/20 transition hover:border-sky-500 hover:bg-slate-700/70
+                    {% if column.stage == 'CLOSED' %}opacity-70 hover:opacity-100{% endif %}">
+            <div class="flex items-start justify-between gap-2">
+              <span class="truncate font-medium text-slate-100">{{ q.customer.name }}</span>
+              <span class="shrink-0 rounded-full border border-slate-700 px-1.5 py-0.5 text-[0.6rem] uppercase tracking-wide text-slate-400">
+                {{ q.customer.tier.name }}
+              </span>
+            </div>
+            <div class="mt-2 text-lg font-semibold tabular-nums text-slate-50">{{ q.total|money }}</div>
+            <div class="mt-2 flex flex-wrap items-center gap-1.5 text-[0.7rem]">
+              <span class="rounded px-1.5 py-0.5 font-medium
+                {% if q.stage == 'DRAFT' %}bg-slate-700 text-slate-200
+                {% elif q.stage == 'PENDING_APPROVAL' %}bg-amber-900 text-amber-200
+                {% elif q.stage == 'APPROVED' %}bg-emerald-900 text-emerald-200
+                {% elif q.stage == 'REJECTED' %}bg-rose-900 text-rose-200
+                {% elif q.stage == 'UNDER_NEGOTIATION' %}bg-violet-900 text-violet-200
+                {% else %}bg-sky-900 text-sky-200{% endif %}">{{ q.get_stage_display }}</span>
+              {% if q.risk_score > 0 %}
+                <span class="rounded bg-rose-950 px-1.5 py-0.5 font-medium text-rose-300"
+                      title="Blended discount risk score">risk {{ q.risk_score }}</span>
+              {% endif %}
+            </div>
+            <div class="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
+              <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="8" r="3.2"/><path d="M5 20a7 7 0 0 1 14 0"/>
+              </svg>
+              <span class="truncate">{{ q.number }} &middot; {{ q.rep.name }}</span>
+            </div>
+          </a>
+        {% empty %}
+          <p class="px-2 py-6 text-center text-xs text-slate-600">Nothing here</p>
+        {% endfor %}
+      </div>
+    </section>
+  {% endfor %}
+</div>
+{% endblock %}

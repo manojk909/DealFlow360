@@ -1,0 +1,58 @@
+{% extends "core/workspace_base.html" %}
+{% block title %}Warehouses &middot; DealFlow360{% endblock %}
+
+{% block content %}
+<div>
+  <h1 class="text-2xl font-semibold tracking-tight text-slate-50">Warehouses</h1>
+  <p class="mt-1 text-sm text-slate-400">
+    Shipping cost weight is what the split algorithm minimises &mdash; the cheapest warehouse
+    that can cover a line ships it alone.
+  </p>
+</div>
+
+<div class="mt-6 grid gap-3 lg:grid-cols-3">
+  {% for warehouse in warehouses %}
+    <a href="{% url 'core:warehouse_detail' warehouse.pk %}"
+       class="block rounded-xl border border-slate-800 bg-slate-900 p-5 no-underline shadow-lg shadow-black/20 transition hover:border-sky-600">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <h2 class="truncate text-lg font-semibold text-slate-100">{{ warehouse.name }}</h2>
+          <p class="mt-0.5 text-xs text-slate-500">shipping weight {{ warehouse.shipping_cost_weight }}</p>
+        </div>
+        <svg class="h-8 w-8 shrink-0 text-slate-600" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 9.5 12 4l9 5.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>
+          <path d="M8 21v-7h8v7"/>
+        </svg>
+      </div>
+
+      <dl class="mt-4 grid grid-cols-3 gap-2 text-center">
+        <div class="rounded-lg border border-slate-800 bg-slate-950/40 px-2 py-2">
+          <dt class="text-[0.65rem] uppercase tracking-wide text-slate-500">Products</dt>
+          <dd class="mt-0.5 text-lg font-semibold tabular-nums text-slate-100">{{ warehouse.product_count }}</dd>
+        </div>
+        <div class="rounded-lg border border-slate-800 bg-slate-950/40 px-2 py-2">
+          <dt class="text-[0.65rem] uppercase tracking-wide text-slate-500">On hand</dt>
+          <dd class="mt-0.5 text-lg font-semibold tabular-nums text-slate-100">{{ warehouse.units_on_hand }}</dd>
+        </div>
+        <div class="rounded-lg border border-slate-800 bg-slate-950/40 px-2 py-2">
+          <dt class="text-[0.65rem] uppercase tracking-wide text-slate-500">Reserved</dt>
+          <dd class="mt-0.5 text-lg font-semibold tabular-nums text-amber-400">{{ warehouse.units_reserved }}</dd>
+        </div>
+      </dl>
+
+      {% if warehouse.below_reorder %}
+        <p class="mt-3 flex items-center gap-1.5 text-xs font-medium text-amber-300">
+          <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/>
+          </svg>
+          {{ warehouse.below_reorder }} line{{ warehouse.below_reorder|pluralize }} at or below the reorder point
+        </p>
+      {% else %}
+        <p class="mt-3 text-xs text-slate-600">Every line is above its reorder point.</p>
+      {% endif %}
+    </a>
+  {% empty %}
+    <p class="text-slate-600">No warehouses configured yet.</p>
+  {% endfor %}
+</div>
+{% endblock %}

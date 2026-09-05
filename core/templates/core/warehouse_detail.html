@@ -1,0 +1,86 @@
+{% extends "core/workspace_base.html" %}
+{% block title %}{{ warehouse.name }} &middot; DealFlow360{% endblock %}
+
+{% block content %}
+<a href="{% url 'core:warehouse_list' %}" class="text-sm text-slate-500 no-underline hover:text-sky-400">&larr; Warehouses</a>
+
+<div class="mt-2 flex flex-wrap items-end justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight text-slate-50">{{ warehouse.name }}</h1>
+    <p class="mt-1 text-sm text-slate-400">
+      Shipping cost weight {{ warehouse.shipping_cost_weight }} &middot;
+      {{ totals.products }} product line{{ totals.products|pluralize }} stocked here
+    </p>
+  </div>
+  <form method="get" class="flex items-end gap-2">
+    <label class="text-xs text-slate-400">Category
+      <select name="category" class="mt-1 rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100">
+        <option value="">All categories</option>
+        {% for category in categories %}
+          <option value="{{ category.pk }}" {% if selected_category == category.pk|stringformat:"s" %}selected{% endif %}>
+            {{ category.name }}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="rounded bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-500">Filter</button>
+  </form>
+</div>
+
+<div class="mt-5 grid gap-3 sm:grid-cols-4">
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <span class="text-xs font-medium text-slate-400">Product lines</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-slate-50">{{ totals.products }}</p>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <span class="text-xs font-medium text-slate-400">Units on hand</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-slate-50">{{ totals.on_hand }}</p>
+  </div>
+  <div class="rounded-xl border border-amber-900/50 bg-gradient-to-br from-amber-950/50 to-slate-900 p-4">
+    <span class="text-xs font-medium text-amber-200/70">Reserved</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-amber-300">{{ totals.reserved }}</p>
+    <p class="mt-1 text-xs text-slate-500">committed to confirmed orders</p>
+  </div>
+  <div class="rounded-xl border border-rose-900/50 bg-gradient-to-br from-rose-950/50 to-slate-900 p-4">
+    <span class="text-xs font-medium text-rose-200/70">Needs restock</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-rose-300">{{ totals.restock }}</p>
+    <p class="mt-1 text-xs text-slate-500">at or below the reorder point</p>
+  </div>
+</div>
+
+<div class="mt-6 overflow-x-auto rounded-xl border border-slate-800">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-800/60 text-left text-[0.68rem] uppercase tracking-wide text-slate-400">
+      <tr>
+        <th class="px-4 py-2.5">Product</th><th class="px-4 py-2.5">Category</th>
+        <th class="px-4 py-2.5 text-right">On hand</th><th class="px-4 py-2.5 text-right">Reserved</th>
+        <th class="px-4 py-2.5 text-right">Available</th><th class="px-4 py-2.5 text-right">Reorder point</th>
+        <th class="px-4 py-2.5">Replenishment</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-800 bg-slate-900">
+      {% for row in rows %}
+        <tr class="{% if row.reorder_point and row.qty_available <= row.reorder_point %}bg-amber-950/20{% endif %}">
+          <td class="px-4 py-2.5 text-slate-200">{{ row.product.name }}</td>
+          <td class="px-4 py-2.5 text-slate-400">{{ row.product.category.name }}</td>
+          <td class="px-4 py-2.5 text-right tabular-nums text-slate-300">{{ row.qty_on_hand }}</td>
+          <td class="px-4 py-2.5 text-right tabular-nums text-amber-400">{{ row.qty_reserved }}</td>
+          <td class="px-4 py-2.5 text-right tabular-nums font-medium text-slate-100">{{ row.qty_available }}</td>
+          <td class="px-4 py-2.5 text-right tabular-nums text-slate-500">{{ row.reorder_point }}</td>
+          <td class="px-4 py-2.5 text-xs">
+            {% if row.reorder_point and row.qty_available <= row.reorder_point %}
+              <span class="rounded bg-amber-900 px-1.5 py-0.5 font-semibold text-amber-200">restock</span>
+            {% else %}
+              <span class="text-slate-600">ok</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="px-4 py-10 text-center text-slate-600">
+          Nothing stocked here for that filter.
+        </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

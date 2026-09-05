@@ -281,6 +281,7 @@ def confirm(quotation):
             approval is outstanding.
     """
     from core.models import ApprovalStep, Quotation
+    from core.services import billing
     from core.services import approval
 
     confirmable = {
@@ -306,4 +307,5 @@ def confirm(quotation):
             action="CUSTOMER_CONFIRMED",
             reason=f"{quotation.customer.name} confirmed the quotation in the portal.",
         )
+        billing.on_order_confirmed(quotation)
     return quotation

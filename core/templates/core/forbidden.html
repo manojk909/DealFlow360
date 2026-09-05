@@ -1,0 +1,32 @@
+{% extends "core/workspace_base.html" %}
+{% block title %}Not your role &middot; DealFlow360{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-lg py-10 text-center">
+  <span class="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-amber-800 bg-amber-950/40">
+    <svg class="h-7 w-7 text-amber-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+    </svg>
+  </span>
+  <h1 class="mt-4 text-xl font-semibold text-slate-100">That screen belongs to another role</h1>
+  <p class="mt-2 text-sm text-slate-400">
+    You are signed in as <strong class="text-slate-200">{{ request.user.name }}</strong>
+    ({{ request.user.get_role_display }}). This one is for
+    {% for role in required %}{{ role }}{% if not forloop.last %}, {% endif %}{% endfor %}.
+  </p>
+  <p class="mt-2 text-xs text-slate-500">
+    The refusal is the server&rsquo;s, not this page&rsquo;s &mdash; the same check runs whether you
+    arrive by link or by typing the address.
+  </p>
+  <div class="mt-6 flex flex-wrap justify-center gap-2">
+    <a href="{% url 'core:quotation_list' %}"
+       class="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-sky-500">
+      Back to quotations
+    </a>
+    <a href="{% url 'core:profile' %}"
+       class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 no-underline hover:bg-slate-800">
+      What my role can reach
+    </a>
+  </div>
+</div>
+{% endblock %}

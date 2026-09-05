@@ -1,0 +1,72 @@
+{% extends "core/workspace_base.html" %}
+{% load money %}
+{% block title %}Customers &middot; DealFlow360{% endblock %}
+
+{% block content %}
+<div>
+  <h1 class="text-2xl font-semibold tracking-tight text-slate-50">Customers</h1>
+  <p class="mt-1 text-sm text-slate-400">
+    What each account owns today, and what it earns per month. An asset is written when an
+    order is confirmed &mdash; never by hand.
+  </p>
+</div>
+
+<div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+  <div class="rounded-xl border border-emerald-900/50 bg-gradient-to-br from-emerald-950/50 to-slate-900 p-4">
+    <span class="text-xs font-medium text-emerald-200/70">Monthly recurring revenue</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-emerald-300">{{ summary.mrr|money:0 }}</p>
+    <p class="mt-1 text-xs text-slate-500">normalised across every plan interval</p>
+  </div>
+  <div class="rounded-xl border border-sky-900/60 bg-gradient-to-br from-sky-950/50 to-slate-900 p-4">
+    <span class="text-xs font-medium text-sky-200/70">Annual run rate</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-sky-300">{{ summary.arr|money:0 }}</p>
+    <p class="mt-1 text-xs text-slate-500">MRR &times; 12</p>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <span class="text-xs font-medium text-slate-400">Live contracts</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-slate-50">{{ summary.contracts }}</p>
+    <p class="mt-1 text-xs text-slate-500">recurring assets currently active</p>
+  </div>
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+    <span class="text-xs font-medium text-slate-400">Paying customers</span>
+    <p class="mt-2 text-3xl font-semibold tabular-nums text-slate-50">{{ summary.customers }}</p>
+    <p class="mt-1 text-xs text-slate-500">with at least one live contract</p>
+  </div>
+</div>
+
+<div class="mt-6 overflow-x-auto rounded-xl border border-slate-800">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-800/60 text-left text-[0.68rem] uppercase tracking-wide text-slate-400">
+      <tr>
+        <th class="px-4 py-2.5">Customer</th><th class="px-4 py-2.5">Tier</th>
+        <th class="px-4 py-2.5 text-right">Assets owned</th>
+        <th class="px-4 py-2.5 text-right">Quotations</th>
+        <th class="px-4 py-2.5 text-right">MRR</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-800 bg-slate-900">
+      {% for customer in customers %}
+        <tr class="hover:bg-slate-800/60">
+          <td class="px-4 py-2.5">
+            <a href="{% url 'core:customer_detail' customer.pk %}"
+               class="font-medium text-sky-400 no-underline hover:underline">{{ customer.name }}</a>
+            <span class="block text-xs text-slate-600">{{ customer.email }}</span>
+          </td>
+          <td class="px-4 py-2.5">
+            <span class="rounded-full border border-slate-700 px-2 py-0.5 text-[0.65rem] uppercase tracking-wide text-slate-400">
+              {{ customer.tier.name }}
+            </span>
+          </td>
+          <td class="px-4 py-2.5 text-right tabular-nums text-slate-300">{{ customer.asset_count }}</td>
+          <td class="px-4 py-2.5 text-right tabular-nums text-slate-400">{{ customer.quotation_count }}</td>
+          <td class="px-4 py-2.5 text-right tabular-nums font-medium {% if customer.monthly %}text-emerald-400{% else %}text-slate-600{% endif %}">
+            {{ customer.monthly|money }}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="px-4 py-10 text-center text-slate-600">No customers yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

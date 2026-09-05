@@ -1,4 +1,5 @@
 {% extends "core/workspace_base.html" %}
+{% load money %}
 {% block title %}Fulfilment &middot; DealFlow360{% endblock %}
 
 {% block content %}
@@ -16,7 +17,7 @@
         <div class="font-medium text-slate-100">{{ row.quotation.customer.name }}</div>
         <div class="text-xs text-slate-500">{{ row.quotation.number }}</div>
       </div>
-      <div class="tabular-nums text-slate-200">&euro;{{ row.quotation.total|floatformat:2 }}</div>
+      <div class="tabular-nums text-slate-200">{{ row.quotation.total|money }}</div>
       <span class="rounded px-2 py-0.5 text-xs font-medium
         {% if row.awaiting %}bg-amber-900 text-amber-200{% else %}bg-emerald-900 text-emerald-200{% endif %}">
         {{ row.quotation.get_stage_display }}
@@ -40,7 +41,9 @@
     <thead class="bg-slate-900 text-left text-[0.68rem] uppercase tracking-wide text-slate-400">
       <tr><th class="px-3 py-2">Product</th><th class="px-3 py-2">Warehouse</th>
           <th class="px-3 py-2 text-right">On hand</th><th class="px-3 py-2 text-right">Reserved</th>
-          <th class="px-3 py-2 text-right">Available</th></tr>
+          <th class="px-3 py-2 text-right">Available</th>
+          <th class="px-3 py-2 text-right">Reorder point</th>
+          <th class="px-3 py-2">Replenishment</th></tr>
     </thead>
     <tbody class="divide-y divide-slate-800 bg-slate-950/40">
       {% for row in stock %}
@@ -51,6 +54,16 @@
           <td class="px-3 py-2 text-right tabular-nums text-slate-300">{{ row.qty_on_hand }}</td>
           <td class="px-3 py-2 text-right tabular-nums text-amber-400">{{ row.qty_reserved }}</td>
           <td class="px-3 py-2 text-right tabular-nums font-medium text-slate-100">{{ row.qty_available }}</td>
+          <td class="px-3 py-2 text-right tabular-nums text-slate-500">{{ row.reorder_point }}</td>
+          {% comment %} ADR-009 item 3: a replenishment rule is a reorder point, and it flags
+             the row. Nothing auto-orders — that needs a supplier the PDF never mentions. {% endcomment %}
+          <td class="px-3 py-2 text-xs">
+            {% if row.reorder_point and row.qty_available <= row.reorder_point %}
+              <span class="rounded bg-amber-900 px-1.5 py-0.5 font-semibold text-amber-200">restock</span>
+            {% else %}
+              <span class="text-slate-600">ok</span>
+            {% endif %}
+          </td>
         </tr>
       {% endfor %}
     </tbody>
