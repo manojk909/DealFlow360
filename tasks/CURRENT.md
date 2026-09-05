@@ -41,9 +41,9 @@ governance story hollow.
 
 ### Acceptance
 
-- [ ] All eight criteria run by hand against  + , results recorded.
+- [ ] All eight criteria run by hand against a clean `migrate` + `seed_demo`, results recorded.
 - [ ] Any failure becomes a numbered task, not a note.
-- [ ]  Round 4 written from the result.
+- [ ] `docs/EVALUATOR_UPDATES.md` Round 4 written from the result.
 
 ### Then what
 
