@@ -37,12 +37,39 @@ The API under test, as fixed by ADR-005:
 import unittest
 from decimal import Decimal
 
-try:
-    from core.services.risk import score_quotation  # noqa: F401
+def _risk_is_implemented():
+    """True once `score_quotation` actually computes something.
 
-    RISK_IMPLEMENTED = True
-except ImportError:  # pragma: no cover - expected until T-09 lands
-    RISK_IMPLEMENTED = False
+    The contract pass (before T-09) creates `core/services/risk.py` with the real
+    signatures and `NotImplementedError` bodies, so "the module imports" stopped being
+    a useful signal. This probes for a *working* implementation instead: a stub raises
+    NotImplementedError and is skipped; anything else runs and is judged by the real
+    assertions below.
+
+    **This changes the skip condition only.** No expectation in this file has been
+    relaxed — the two tests still assert exactly the numbers ADR-005 fixed.
+    """
+    try:
+        from core.services.risk import score_quotation
+    except ImportError:  # pragma: no cover - before the contract pass
+        return False
+    try:
+        score_quotation(
+            lines=[],
+            tier_max_discount_pct=Decimal("0"),
+            category_ceilings={},
+        )
+    except NotImplementedError:  # pragma: no cover - contract stub, not yet built
+        return False
+    except Exception:  # noqa: BLE001 - it does something; let the assertions judge it
+        return True
+    return True
+
+
+RISK_IMPLEMENTED = _risk_is_implemented()
+
+if RISK_IMPLEMENTED:
+    from core.services.risk import score_quotation
 
 
 GOLD_TIER_CEILING = Decimal("15")
@@ -57,7 +84,7 @@ GOLD_CATEGORY_CEILINGS = {
 
 @unittest.skipUnless(
     RISK_IMPLEMENTED,
-    "core.services.risk not implemented yet — see T-09 in tasks/BACKLOG.md",
+    "core.services.risk is still a contract stub — T-09 implements it",
 )
 class BlendedRiskScoreSpecTests(unittest.TestCase):
     """PDF §10's two worked examples, asserted directly."""
