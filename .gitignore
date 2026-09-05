@@ -1,0 +1,19 @@
+# Django / Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.log
+
+# Local database (rebuilt from migrations + seed_demo — see ADR-002)
+db.sqlite3
+db.sqlite3-journal
+
+# Environment
+.env
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
