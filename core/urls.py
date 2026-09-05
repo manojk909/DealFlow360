@@ -34,6 +34,8 @@ urlpatterns = [
     path("workspace/quotations/<int:pk>/lines/<int:line_id>/", views.line_update, name="line_update"),
     path("workspace/quotations/<int:pk>/lines/<int:line_id>/delete/", views.line_delete, name="line_delete"),
     path("workspace/quotations/<int:pk>/order-discount/", views.order_discount, name="order_discount"),
+    path("workspace/quotations/<int:pk>/upsell/add/", views.upsell_add, name="upsell_add"),
+    path("workspace/quotations/<int:pk>/upsell/dismiss/", views.upsell_dismiss, name="upsell_dismiss"),
     path("workspace/quotations/<int:pk>/submit/", views.quotation_submit, name="quotation_submit"),
     path("workspace/quotations/<int:pk>/share/", views.quotation_share, name="quotation_share"),
 

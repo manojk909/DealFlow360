@@ -503,6 +503,51 @@ Each constraining invariant, expressed:
 
 ---
 
+---
+
+## ADR-011 — Where the upsell minimum-margin threshold lives
+
+**Status:** Accepted
+**Date:** 2026-09-05
+
+**Context.** BR-7 and PDF A6 require that only suggestions above a configured minimum
+margin threshold surface in the upsell panel. But **no entity in DATA_MODEL.md holds that
+number**, because the PDF introduces it only inside section A6 — the upsell *configuration
+screen* — which the PDF itself marks Optional, and which is BONUS work in our backlog
+(T-27). So the threshold is required by a SHOULD feature and owned by a BONUS one.
+
+This ambiguity had no ADR. Added here per CLAUDE.md's instruction to record rather than
+silently invent.
+
+**Decision.** `core/services/upsell.py` takes `min_margin_pct` as an **explicit parameter**.
+When a caller passes nothing it falls back to a single named module constant,
+`DEFAULT_MIN_MARGIN_PCT`, documented in place as a placeholder for the A6 configuration
+row that does not exist yet.
+
+**Reason.** The parameter is the real interface: when T-27 adds an upsell configuration
+row, the view reads it and passes it in, and no service code changes. A named constant
+with one definition is honest about being a default and is trivial to replace; scattering
+the number through the ranking logic would not be.
+
+This is deliberately **not** treated the same as discount ceilings, approval bands,
+shipping weights or subscription plans. Those are named by CLAUDE.md's no-hardcoding rule,
+are all MUST-priority, and all have entities in the data model. This one has none of those
+properties, and inventing a model plus a migration for a BONUS screen's setting would cost
+more than it is worth today.
+
+**Consequences.**
+- The threshold is visible in exactly one place and is named as a default, not a rule.
+- Changing it today means a code change. That is a real limitation and is stated on the
+  panel's own backlog entry rather than hidden.
+- T-27 replaces the constant with a configuration row. Until then the panel is honest:
+  the number is ours, not the customer's.
+- Nothing else in the services layer gained a constant. Ceilings, bands, weights and plans
+  are all still database rows.
+
+**Blocks:** nothing. **Closed by:** T-27 (upsell rule configuration screen).
+
+---
+
 ## Cross-document consistency check — 2026-09-05
 
 Run after all documents were created (Step 12).

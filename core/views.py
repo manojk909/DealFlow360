@@ -32,7 +32,7 @@ from core.models import (
     Stock,
     User,
 )
-from core.services import approval, billing, fulfilment, negotiation, pricing, risk
+from core.services import approval, billing, fulfilment, negotiation, pricing, risk, upsell
 
 
 # --------------------------------------------------------------------- health
@@ -137,7 +137,7 @@ def _decimal(raw, field, minimum=None, maximum=None):
     return value
 
 
-def _builder_state(quotation, error=None):
+def _builder_state(quotation, error=None, dismissed=()):
     """Everything the builder's live region needs, recomputed from the services.
 
     Called on first render and again after every HTMX edit, so the totals, the margin and
@@ -158,6 +158,11 @@ def _builder_state(quotation, error=None):
         "totals": totals,
         "risk": result,
         "error": error,
+        # Rendered inside the live region on purpose: adding a suggestion has to update
+        # the margin indicator in the SAME swap (AC-4), and the panel itself has to
+        # refresh so the product just added stops being suggested.
+        "suggestions": upsell.suggest(quotation, exclude_product_ids=dismissed),
+        "min_margin_pct": upsell.DEFAULT_MIN_MARGIN_PCT,
     }
 
 
@@ -166,7 +171,11 @@ def _render_builder_region(request, quotation, error=None, status=200):
     return render(
         request,
         "core/partials/builder_region.html",
-        _builder_state(quotation, error=error),
+        _builder_state(
+            quotation,
+            error=error,
+            dismissed=request.session.get("upsell_dismissed", []),
+        ),
         status=status,
     )
 
@@ -217,7 +226,9 @@ def quotation_builder(request, pk):
     quotation = get_object_or_404(
         Quotation.objects.select_related("customer", "customer__tier", "rep"), pk=pk
     )
-    context = _builder_state(quotation)
+    context = _builder_state(
+        quotation, dismissed=request.session.get("upsell_dismissed", [])
+    )
     context["active"] = "quotations"
     context["unbuilt"] = UNBUILT_TABS
     context["categories"] = (
@@ -694,3 +705,35 @@ def quotation_share(request, pk):
         reason="Portal link created and shared with the customer.",
     )
     return redirect("core:quotation_builder", pk=pk)
+
+
+# --------------------------------------------------------------------- T-19 upsell
+
+
+@require_POST
+@login_required
+def upsell_add(request, pk):
+    """AC-4. Add a suggestion and swap the whole live region back.
+
+    The margin indicator, the totals and the remaining suggestions all come back in this
+    one response, which is what makes the update feel immediate.
+    """
+    quotation = get_object_or_404(Quotation, pk=pk)
+    try:
+        product = Product.objects.select_related("subscription_plan").get(
+            pk=request.POST.get("product_id"), active=True
+        )
+    except (Product.DoesNotExist, ValueError):
+        return _render_builder_region(request, quotation, "That product does not exist.", 400)
+
+    upsell.add_to_quotation(quotation, product)
+    return _render_builder_region(request, quotation)
+
+
+@require_POST
+@login_required
+def upsell_dismiss(request, pk):
+    """Stop offering one suggestion for the rest of this editing session."""
+    quotation = get_object_or_404(Quotation, pk=pk)
+    upsell.dismiss(request.session, request.POST.get("product_id"))
+    return _render_builder_region(request, quotation)
