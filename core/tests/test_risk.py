@@ -37,6 +37,21 @@ The API under test, as fixed by ADR-005:
 import unittest
 from decimal import Decimal
 
+from django.test import TestCase
+
+from core.models import (
+    Category,
+    CategoryDiscountCeiling,
+    Customer,
+    CustomerTier,
+    Product,
+    Quotation,
+    QuotationLine,
+    Role,
+    User,
+)
+from core.services.risk import effective_ceiling, score_for_quotation
+
 def _risk_is_implemented():
     """True once `score_quotation` actually computes something.
 
@@ -199,3 +214,173 @@ class BlendedRiskScoreSpecTests(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# Added by T-09, alongside the two specification tests above. These cover paths
+# the PDF's examples do not reach. They must never be used to justify weakening
+# an assertion in BlendedRiskScoreSpecTests.
+# ---------------------------------------------------------------------------
+
+
+class RiskEdgeCaseTests(unittest.TestCase):
+    """Paths the two worked examples do not exercise."""
+
+    def test_empty_quotation_scores_zero_and_does_not_flag(self):
+        """The seeded Acme draft is empty, so this is a real path, not a corner."""
+        result = score_quotation(
+            lines=[],
+            tier_max_discount_pct=GOLD_TIER_CEILING,
+            category_ceilings=GOLD_CATEGORY_CEILINGS,
+        )
+        self.assertEqual(Decimal("0.00"), result.score)
+        self.assertFalse(result.flagged)
+        self.assertEqual([], result.breakdown)
+
+    def test_category_with_no_ceiling_row_falls_back_to_the_tier_ceiling(self):
+        result = score_quotation(
+            lines=[{
+                "line_id": 1, "label": "Mystery", "category": "Uncategorised",
+                "discount_pct": Decimal("18"),
+            }],
+            tier_max_discount_pct=GOLD_TIER_CEILING,
+            category_ceilings=GOLD_CATEGORY_CEILINGS,
+        )
+        line = result.breakdown[0]
+        self.assertEqual(Decimal("15"), line.allowed_pct)
+        self.assertEqual(Decimal("3"), line.over_by_pct)
+
+    def test_a_looser_category_ceiling_cannot_lift_a_line_past_the_tier_cap(self):
+        """min(tier, category) - the stricter always wins (invariant 14)."""
+        result = score_quotation(
+            lines=[{
+                "line_id": 1, "label": "Setup", "category": "Services",
+                "discount_pct": Decimal("18"),
+            }],
+            tier_max_discount_pct=Decimal("15"),
+            category_ceilings={"Services": Decimal("20")},
+        )
+        self.assertEqual(Decimal("15"), result.breakdown[0].allowed_pct)
+        self.assertEqual(Decimal("3.00"), result.score)
+
+    def test_order_discount_compounds_with_the_line_discount(self):
+        """Two discounts do not add: 10% then 5% is 14.5%, not 15%."""
+        result = score_quotation(
+            lines=[{
+                "line_id": 1, "label": "Laptop", "category": "Hardware",
+                "discount_pct": Decimal("10"),
+            }],
+            tier_max_discount_pct=GOLD_TIER_CEILING,
+            category_ceilings=GOLD_CATEGORY_CEILINGS,
+            order_discount_pct=Decimal("5"),
+        )
+        self.assertEqual(Decimal("14.5"), result.breakdown[0].given_pct)
+        self.assertEqual(Decimal("0.00"), result.score)
+
+    def test_an_order_discount_alone_can_push_a_line_over(self):
+        result = score_quotation(
+            lines=[{
+                "line_id": 1, "label": "Setup", "category": "Services",
+                "discount_pct": Decimal("8"),
+            }],
+            tier_max_discount_pct=GOLD_TIER_CEILING,
+            category_ceilings=GOLD_CATEGORY_CEILINGS,
+            order_discount_pct=Decimal("10"),
+        )
+        # 8% then 10% = 17.2%, against the 10% Services ceiling -> 7.2 over.
+        self.assertEqual(Decimal("17.2"), result.breakdown[0].given_pct)
+        self.assertEqual(Decimal("7.20"), result.score)
+        self.assertTrue(result.flagged)
+
+    def test_breakdown_keeps_input_order_and_reports_every_line(self):
+        result = score_quotation(
+            lines=[
+                {"line_id": 7, "label": "A", "category": "Hardware", "discount_pct": Decimal("1")},
+                {"line_id": 8, "label": "B", "category": "Services", "discount_pct": Decimal("2")},
+                {"line_id": 9, "label": "C", "category": "Subscriptions", "discount_pct": Decimal("3")},
+            ],
+            tier_max_discount_pct=GOLD_TIER_CEILING,
+            category_ceilings=GOLD_CATEGORY_CEILINGS,
+        )
+        self.assertEqual([7, 8, 9], [line.line_id for line in result.breakdown])
+        self.assertEqual([], result.offending_lines)
+
+    def test_effective_ceiling_helper_matches_what_the_score_uses(self):
+        self.assertEqual(Decimal("10"), effective_ceiling(Decimal("15"), Decimal("10")))
+        self.assertEqual(Decimal("15"), effective_ceiling(Decimal("15"), Decimal("20")))
+        self.assertEqual(Decimal("15"), effective_ceiling(Decimal("15"), None))
+
+
+class ScoreForQuotationTests(TestCase):
+    """The ORM adapter, against real configuration rows."""
+
+    def setUp(self):
+        gold = CustomerTier.objects.create(name="Gold", max_discount_pct=Decimal("15"))
+        hardware = Category.objects.create(name="Hardware")
+        services = Category.objects.create(name="Services")
+        CategoryDiscountCeiling.objects.create(
+            tier=gold, category=hardware, max_discount_pct=Decimal("15")
+        )
+        CategoryDiscountCeiling.objects.create(
+            tier=gold, category=services, max_discount_pct=Decimal("10")
+        )
+        customer = Customer.objects.create(name="Acme", email="a@a.test", tier=gold)
+        rep = User.objects.create_user(
+            email="rep@risk.test", password="x", name="Rep", role=Role.REP
+        )
+        self.quotation = Quotation.objects.create(
+            number="Q-RISK-1", customer=customer, rep=rep,
+            last_activity_at="2026-09-05T10:00:00Z",
+        )
+        laptop = Product.objects.create(
+            name="Laptop Pro 14", category=hardware,
+            list_price=Decimal("1450"), cost=Decimal("1050"),
+        )
+        setup = Product.objects.create(
+            name="Onsite Setup Service", category=services,
+            list_price=Decimal("600"), cost=Decimal("330"),
+        )
+        QuotationLine.objects.create(
+            quotation=self.quotation, product=laptop, qty=6,
+            unit_price=Decimal("1450"), discount_pct=Decimal("12"),
+        )
+        QuotationLine.objects.create(
+            quotation=self.quotation, product=setup, qty=1,
+            unit_price=Decimal("600"), discount_pct=Decimal("18"),
+        )
+
+    def test_reproduces_the_pdf_example_from_database_rows(self):
+        result = score_for_quotation(self.quotation)
+        self.assertEqual(Decimal("8.00"), result.score)
+        self.assertTrue(result.flagged)
+        self.assertEqual(1, len(result.offending_lines))
+        self.assertEqual("Onsite Setup Service", result.offending_lines[0].label)
+
+    def test_reads_only_and_does_not_write_the_snapshot(self):
+        """approval.py stores risk_score at submit time - not this function."""
+        score_for_quotation(self.quotation)
+        self.quotation.refresh_from_db()
+        self.assertEqual(Decimal("0.00"), self.quotation.risk_score)
+
+    def test_loosening_the_ceiling_row_changes_the_score_with_no_code_change(self):
+        """Configuration drives the score. No constant in code decides this.
+
+        Note what loosening the CATEGORY ceiling alone can and cannot do. Raising
+        Services from 10 to 18 moves the score from 8.00 to 3.00 - not to zero -
+        because the effective ceiling is min(tier 15, category 18) = 15, and the
+        line is discounted 18%. The stricter of the two always wins (invariant 14).
+        """
+        CategoryDiscountCeiling.objects.filter(category__name="Services").update(
+            max_discount_pct=Decimal("18")
+        )
+        self.assertEqual(Decimal("3.00"), score_for_quotation(self.quotation).score)
+
+    def test_only_raising_the_tier_ceiling_too_takes_the_score_to_zero(self):
+        CategoryDiscountCeiling.objects.filter(category__name="Services").update(
+            max_discount_pct=Decimal("18")
+        )
+        CustomerTier.objects.filter(name="Gold").update(max_discount_pct=Decimal("18"))
+        self.quotation.refresh_from_db()
+        result = score_for_quotation(self.quotation)
+        self.assertEqual(Decimal("0.00"), result.score)
+        self.assertFalse(result.flagged)
