@@ -81,7 +81,7 @@
 
   <rect class="box" x="352" y="8" width="300" height="52" rx="6"/>
   <text class="tb" x="366" y="28">Backend configuration</text>
-  <text class="s"  x="366" y="44">/admin/ · Django admin, 22 models</text>
+  <text class="s"  x="366" y="44">/admin/ · Django admin, 24 models</text>
 
   <rect class="cust" x="666" y="8" width="446" height="52" rx="6"/>
   <text class="tb" x="680" y="28">Customer portal — separate app, separate look</text>
@@ -171,7 +171,9 @@
       <li><b>Stock</b> <span class="key">product × warehouse; available = on hand − reserved</span></li>
       <li><b>FulfilmentAllocation</b> <span class="key">qty, is_backorder, is_manual_override</span></li>
       <li><b>Invoice</b> → <b>Payment</b> <span class="key">status derived from the payment sum</span></li>
-      <li><b>BillingScheduleEntry</b> <span class="key">recurring lines — schema only, T-20</span></li>
+      <li><b>BillingScheduleEntry</b> <span class="key">one row per recurring period; daily pro-rata adjustments (ADR-008)</span></li>
+      <li><b>Asset</b> <span class="key">what a customer owns; MRR, renewals (ADR-013)</span></li>
+      <li><b>SalesSetting</b> <span class="key">stall window, anomaly threshold, currency (ADR-007, ADR-014)</span></li>
     </ul>
   </div>
 </div>
@@ -232,10 +234,11 @@
 </div>
 
 <footer>
-  22 models · 8 service modules · 170 tests · all 8 acceptance criteria verified against a
+  24 models · 9 service modules · 262 tests · all 8 acceptance criteria verified against a
   freshly seeded database (<code>docs/ACCEPTANCE.md</code>).
-  Decisions and their reasoning: <code>docs/DECISIONS.md</code>, ADR-001 … ADR-012.
-  Not built: recurring billing schedules, deal health, reporting — see
+  Decisions and their reasoning: <code>docs/DECISIONS.md</code>, ADR-001 … ADR-014.
+  Every module in PDF §4 is built. Not built, deliberately: amendments and co-terming,
+  churn analytics, contract documents and e-signature, multi-currency conversion — see
   <code>docs/NEXT.md</code>.
 </footer>
 

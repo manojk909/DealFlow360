@@ -576,7 +576,7 @@ class SalesSettingAdmin(admin.ModelAdmin):
         "stall_days", "anomaly_window_days", "anomaly_threshold_pct", "delivery_promise_days",
     )
     fieldsets = (
-        ("Currency (ADR-012)", {
+        ("Currency (ADR-014)", {
             "fields": ("currency_code", "currency_symbol", "currency_rate"),
             "description": (
                 "Amounts are stored in the base currency and multiplied by the rate on "
