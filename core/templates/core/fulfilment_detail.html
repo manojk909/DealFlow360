@@ -1,0 +1,153 @@
+{% extends "core/workspace_base.html" %}
+{% block title %}Fulfilment {{ quotation.number }} &middot; DealFlow360{% endblock %}
+
+{% block content %}
+<a href="{% url 'core:fulfilment_list' %}" class="text-xs text-slate-500 no-underline hover:text-sky-400">&larr; Fulfilment</a>
+<h1 class="mt-1 text-xl font-semibold text-slate-100">
+  Fulfilment &middot; {{ quotation.number }} &middot; {{ quotation.customer.name }}
+</h1>
+<p class="mt-1 text-sm text-slate-400">Stage: {{ quotation.get_stage_display }}</p>
+
+{% if error %}
+  <p class="mt-4 rounded border border-rose-800 bg-rose-950/60 px-3 py-2 text-sm text-rose-200">{{ error }}</p>
+{% endif %}
+{% if message %}
+  <p class="mt-4 rounded border border-emerald-800 bg-emerald-950/60 px-3 py-2 text-sm text-emerald-200">{{ message }}</p>
+{% endif %}
+
+<div class="mt-6 grid gap-4 sm:grid-cols-3">
+  <div class="rounded-lg border border-slate-800 bg-slate-900 p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-500">Shipments</div>
+    <div class="mt-1 text-2xl font-semibold tabular-nums text-slate-50">{{ suggestion.shipment_count }}</div>
+  </div>
+  <div class="rounded-lg border border-slate-800 bg-slate-900 p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-500">Estimated cost</div>
+    <div class="mt-1 text-2xl font-semibold tabular-nums text-slate-50">{{ suggestion.estimated_cost }}</div>
+    <div class="mt-1 text-xs text-slate-500">sum of qty &times; warehouse shipping weight</div>
+  </div>
+  <div class="rounded-lg border border-slate-800 bg-slate-900 p-4">
+    <div class="text-xs uppercase tracking-wide text-slate-500">Backordered</div>
+    <div class="mt-1 text-2xl font-semibold tabular-nums {% if suggestion.has_backorder %}text-amber-400{% else %}text-slate-50{% endif %}">
+      {% if suggestion.has_backorder %}yes{% else %}none{% endif %}
+    </div>
+  </div>
+</div>
+
+<h2 class="mt-8 text-sm font-semibold uppercase tracking-wide text-slate-300">Recommended split</h2>
+<div class="mt-2 overflow-x-auto rounded-lg border border-slate-800">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-900 text-left text-[0.68rem] uppercase tracking-wide text-slate-400">
+      <tr><th class="px-3 py-2">Warehouse</th><th class="px-3 py-2">Product</th>
+          <th class="px-3 py-2 text-right">Qty fulfilled</th><th class="px-3 py-2">Status</th></tr>
+    </thead>
+    <tbody class="divide-y divide-slate-800 bg-slate-950/40">
+      {% for row in suggested_rows %}
+        <tr class="{% if row.allocation.is_backorder %}bg-amber-950/30{% endif %}">
+          <td class="px-3 py-2 text-slate-100">{{ row.allocation.warehouse_name }}</td>
+          <td class="px-3 py-2 text-slate-300">{{ row.line.product.name }}</td>
+          <td class="px-3 py-2 text-right tabular-nums text-slate-100">{{ row.allocation.qty }}</td>
+          <td class="px-3 py-2">
+            {% if row.allocation.is_backorder %}
+              <span class="rounded bg-amber-900 px-1.5 py-0.5 text-xs font-semibold text-amber-200">BACKORDER</span>
+            {% else %}
+              <span class="rounded bg-emerald-950 px-1.5 py-0.5 text-xs text-emerald-300">Ships</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4" class="px-3 py-6 text-center text-slate-600">Nothing to ship.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="mt-3 rounded border border-amber-900/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200/80">
+  This split is a <strong>documented heuristic</strong>, not an optimiser. Each line is filled from
+  the cheapest warehouse first and spills into the next; a warehouse that can cover the whole
+  line ships it alone. Lines are solved independently, so the shipment count across a
+  multi-line order is not globally optimal. Shipments are minimised <em>weighted by shipping
+  cost</em> &mdash; a single shipment from a dearer warehouse can cost more than two from cheap ones.
+</p>
+
+{% if skipped_lines %}
+  <p class="mt-3 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-400">
+    Not warehoused, so not part of the split:
+    {% for line in skipped_lines %}<strong class="text-slate-200">{{ line.product.name }}</strong>{% if not forloop.last %}, {% endif %}{% endfor %}.
+    Services and subscriptions have no stock rows &mdash; they are skipped, not backordered.
+  </p>
+{% endif %}
+
+{% if can_accept %}
+  <form method="post" action="{% url 'core:fulfilment_accept' quotation.pk %}" class="mt-4">
+    {% csrf_token %}
+    <button type="submit" class="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">
+      Accept suggested split
+    </button>
+    <span class="ml-3 text-xs text-slate-500">
+      Reserves stock and confirms the order in one transaction. The split is recomputed at
+      that moment, not taken from this page.
+    </span>
+  </form>
+{% endif %}
+
+{% if committed %}
+  <h2 class="mt-8 text-sm font-semibold uppercase tracking-wide text-slate-300">Committed allocations</h2>
+  <div class="mt-2 overflow-x-auto rounded-lg border border-emerald-900/50">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-900 text-left text-[0.68rem] uppercase tracking-wide text-slate-400">
+        <tr><th class="px-3 py-2">Warehouse</th><th class="px-3 py-2">Product</th>
+            <th class="px-3 py-2 text-right">Qty</th><th class="px-3 py-2">Flags</th></tr>
+      </thead>
+      <tbody class="divide-y divide-slate-800 bg-slate-950/40">
+        {% for a in committed %}
+          <tr>
+            <td class="px-3 py-2 text-slate-100">{{ a.warehouse.name }}</td>
+            <td class="px-3 py-2 text-slate-300">{{ a.quotation_line.product.name }}</td>
+            <td class="px-3 py-2 text-right tabular-nums text-slate-100">{{ a.qty }}</td>
+            <td class="px-3 py-2 text-xs">
+              {% if a.is_backorder %}<span class="rounded bg-amber-900 px-1.5 py-0.5 text-amber-200">backorder</span>{% endif %}
+              {% if a.is_manual_override %}<span class="rounded bg-violet-900 px-1.5 py-0.5 text-violet-200">manual</span>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if quotation.stage == 'FULFILLED' %}
+    {# Replaced by a link to the invoice screen in T-17. #}
+    <p class="mt-4 text-xs text-slate-500">Stock is reserved. Invoicing is T-17, next.</p>
+  {% endif %}
+{% endif %}
+
+{% if can_accept and overridable %}
+  <h2 class="mt-8 text-sm font-semibold uppercase tracking-wide text-slate-300">Manual override</h2>
+  <p class="mt-1 text-xs text-slate-500">
+    Re-validated against the same availability rule. An override beyond available stock is
+    refused by the server, not prevented by hiding the control.
+  </p>
+  {% for entry in overridable %}
+    <form method="post" action="{% url 'core:fulfilment_override' quotation.pk %}"
+          class="mt-3 rounded-lg border border-slate-800 bg-slate-900 p-4">
+      {% csrf_token %}
+      <input type="hidden" name="line_id" value="{{ entry.line.pk }}">
+      <div class="text-sm font-medium text-slate-100">
+        {{ entry.line.product.name }} <span class="text-slate-500">&middot; {{ entry.line.qty }} ordered</span>
+      </div>
+      <div class="mt-2 flex flex-wrap items-end gap-4">
+        {% for row in entry.stock %}
+          <label class="text-xs text-slate-400">
+            {{ row.warehouse.name }}
+            <span class="text-slate-600">({{ row.qty_available }} available)</span>
+            <input type="number" name="wh_{{ row.warehouse.pk }}" min="0" value="0"
+                   class="mt-1 block w-24 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-right tabular-nums text-slate-100">
+          </label>
+        {% endfor %}
+        <button type="submit" class="rounded border border-violet-700 px-3 py-1.5 text-sm font-semibold text-violet-300 hover:bg-violet-950">
+          Override this line
+        </button>
+      </div>
+    </form>
+  {% endfor %}
+{% endif %}
+{% endblock %}

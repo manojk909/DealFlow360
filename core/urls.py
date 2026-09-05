@@ -36,6 +36,12 @@ urlpatterns = [
     path("workspace/quotations/<int:pk>/order-discount/", views.order_discount, name="order_discount"),
     path("workspace/quotations/<int:pk>/submit/", views.quotation_submit, name="quotation_submit"),
 
+    # T-16 — fulfilment
+    path("workspace/fulfilment/", views.fulfilment_list, name="fulfilment_list"),
+    path("workspace/fulfilment/<int:pk>/", views.fulfilment_detail, name="fulfilment_detail"),
+    path("workspace/fulfilment/<int:pk>/accept/", views.fulfilment_accept, name="fulfilment_accept"),
+    path("workspace/fulfilment/<int:pk>/override/", views.fulfilment_override, name="fulfilment_override"),
+
     # T-13 — approval
     path("workspace/approvals/", views.approval_list, name="approval_list"),
     path("workspace/approvals/<int:pk>/", views.approval_detail, name="approval_detail"),

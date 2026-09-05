@@ -19,6 +19,8 @@ from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from urllib.parse import quote
+
 from core.models import (
     ApprovalStep,
     Category,
@@ -26,9 +28,10 @@ from core.models import (
     Quotation,
     QuotationLine,
     Role,
+    Stock,
     User,
 )
-from core.services import approval, pricing, risk
+from core.services import approval, fulfilment, pricing, risk
 
 
 # --------------------------------------------------------------------- health
@@ -99,7 +102,6 @@ def require_roles(*roles):
 # the owning task, rather than hidden — an absent feature honestly labelled costs less
 # than one quietly missing (CLAUDE.md hackathon integrity).
 UNBUILT_TABS = [
-    ("Fulfilment", "T-16"),
     ("Subscriptions", "T-20"),
     ("Invoices", "T-17"),
     ("Deal Health", "T-21"),
@@ -406,8 +408,147 @@ def approval_act(request, pk):
     try:
         handlers[action](step, request.user, reason)
     except (ValueError, approval.ApprovalPermissionError) as exc:
-        from urllib.parse import quote
-
         return redirect(f"/workspace/approvals/{pk}/?error={quote(str(exc))}")
 
     return redirect("core:approval_detail", pk=quotation.pk)
+
+
+# --------------------------------------------------------------------- T-16 fulfilment
+
+
+@login_required
+def fulfilment_list(request):
+    """Orders that have cleared approval and are waiting to ship, or already have."""
+    orders = (
+        Quotation.objects.filter(
+            stage__in=[
+                Quotation.Stage.APPROVED,
+                Quotation.Stage.CONFIRMED,
+                Quotation.Stage.FULFILLED,
+                Quotation.Stage.INVOICED,
+                Quotation.Stage.PAID,
+            ]
+        )
+        .select_related("customer", "rep")
+        .order_by("stage", "-last_activity_at")
+    )
+    rows = []
+    for order in orders:
+        rows.append(
+            {
+                "quotation": order,
+                "allocations": order.allocations.select_related("warehouse").all(),
+                "awaiting": order.stage == Quotation.Stage.APPROVED,
+            }
+        )
+    return render(
+        request,
+        "core/fulfilment_list.html",
+        {
+            "rows": rows,
+            "stock": Stock.objects.select_related("product", "warehouse").order_by(
+                "product__name", "warehouse__name"
+            ),
+            "active": "fulfilment",
+            "unbuilt": UNBUILT_TABS,
+        },
+    )
+
+
+def _fulfilment_context(quotation, error=None, message=None):
+    """Suggestion plus whatever has actually been committed, side by side."""
+    suggestion = fulfilment.suggest_split(quotation)
+    lines = {line.pk: line for line in quotation.lines.select_related("product").all()}
+
+    suggested_rows = [
+        {"allocation": a, "line": lines.get(a.quotation_line_id)}
+        for a in suggestion.allocations
+    ]
+    committed = list(
+        quotation.allocations.select_related("warehouse", "quotation_line__product").all()
+    )
+
+    # Only stocked lines can be overridden; the rest have nowhere to ship from.
+    overridable = [
+        {
+            "line": line,
+            "stock": Stock.objects.filter(product=line.product)
+            .select_related("warehouse")
+            .order_by("warehouse__shipping_cost_weight"),
+        }
+        for line in lines.values()
+        if line.pk not in suggestion.skipped_line_ids
+    ]
+
+    return {
+        "quotation": quotation,
+        "suggestion": suggestion,
+        "suggested_rows": suggested_rows,
+        "committed": committed,
+        "skipped_lines": [lines[pk] for pk in suggestion.skipped_line_ids if pk in lines],
+        "overridable": overridable,
+        "can_accept": quotation.stage
+        in {Quotation.Stage.APPROVED, Quotation.Stage.CONFIRMED},
+        "error": error,
+        "message": message,
+        "active": "fulfilment",
+        "unbuilt": UNBUILT_TABS,
+    }
+
+
+@login_required
+def fulfilment_detail(request, pk):
+    """FR-17 / B6. The suggested split from live stock: warehouse, qty, shipments, cost."""
+    quotation = get_object_or_404(
+        Quotation.objects.select_related("customer", "rep"), pk=pk
+    )
+    context = _fulfilment_context(
+        quotation, error=request.GET.get("error"), message=request.GET.get("message")
+    )
+    return render(request, "core/fulfilment_detail.html", context)
+
+
+@require_POST
+@login_required
+def fulfilment_accept(request, pk):
+    """FR-18. Accept the suggested split — recomputed at commit time, not trusted."""
+    quotation = get_object_or_404(Quotation, pk=pk)
+    try:
+        fulfilment.accept_split(quotation, request.user)
+    except (ValueError, fulfilment.InsufficientStock) as exc:
+        return redirect(f"/workspace/fulfilment/{pk}/?error={quote(str(exc))}")
+    return redirect("core:fulfilment_detail", pk=pk)
+
+
+@require_POST
+@login_required
+def fulfilment_override(request, pk):
+    """FR-18. Manual override, re-validated through the same availability rule."""
+    quotation = get_object_or_404(Quotation, pk=pk)
+    line = get_object_or_404(
+        QuotationLine, pk=request.POST.get("line_id"), quotation=quotation
+    )
+
+    pairs = []
+    for key, value in request.POST.items():
+        if not key.startswith("wh_"):
+            continue
+        try:
+            qty = int(_decimal(value or "0", "Quantity", minimum=Decimal("0")))
+        except ValueError as exc:
+            return redirect(f"/workspace/fulfilment/{pk}/?error={quote(str(exc))}")
+        if qty:
+            pairs.append((int(key[3:]), qty))
+
+    if not pairs:
+        return redirect(
+            f"/workspace/fulfilment/{pk}/?error={quote('An override needs at least one quantity.')}"
+        )
+
+    try:
+        fulfilment.apply_manual_override(line, pairs, request.user)
+    except (ValueError, fulfilment.InsufficientStock) as exc:
+        return redirect(f"/workspace/fulfilment/{pk}/?error={quote(str(exc))}")
+    return redirect(
+        f"/workspace/fulfilment/{pk}/?message={quote('Manual override applied.')}"
+    )

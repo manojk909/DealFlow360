@@ -1,0 +1,59 @@
+{% extends "core/workspace_base.html" %}
+{% block title %}Fulfilment &middot; DealFlow360{% endblock %}
+
+{% block content %}
+<h1 class="text-xl font-semibold text-slate-100">Fulfilment and stock</h1>
+<p class="mt-1 text-sm text-slate-400">
+  Orders past approval, and live stock across every warehouse.
+</p>
+
+<h2 class="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-500">Orders</h2>
+<div class="mt-2 space-y-2">
+  {% for row in rows %}
+    <a href="{% url 'core:fulfilment_detail' row.quotation.pk %}"
+       class="flex flex-wrap items-center gap-4 rounded-lg border border-slate-800 bg-slate-900 p-4 no-underline hover:border-sky-600">
+      <div class="min-w-48">
+        <div class="font-medium text-slate-100">{{ row.quotation.customer.name }}</div>
+        <div class="text-xs text-slate-500">{{ row.quotation.number }}</div>
+      </div>
+      <div class="tabular-nums text-slate-200">&euro;{{ row.quotation.total|floatformat:2 }}</div>
+      <span class="rounded px-2 py-0.5 text-xs font-medium
+        {% if row.awaiting %}bg-amber-900 text-amber-200{% else %}bg-emerald-900 text-emerald-200{% endif %}">
+        {{ row.quotation.get_stage_display }}
+      </span>
+      <div class="ml-auto text-xs text-slate-500">
+        {% if row.awaiting %}awaiting split{% else %}
+          {{ row.allocations|length }} allocation{{ row.allocations|length|pluralize }}
+        {% endif %}
+      </div>
+    </a>
+  {% empty %}
+    <p class="rounded-lg border border-slate-800 bg-slate-900 p-8 text-center text-sm text-slate-500">
+      No orders have cleared approval yet.
+    </p>
+  {% endfor %}
+</div>
+
+<h2 class="mt-8 text-xs font-semibold uppercase tracking-wide text-slate-500">Live stock</h2>
+<div class="mt-2 overflow-x-auto rounded-lg border border-slate-800">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-900 text-left text-[0.68rem] uppercase tracking-wide text-slate-400">
+      <tr><th class="px-3 py-2">Product</th><th class="px-3 py-2">Warehouse</th>
+          <th class="px-3 py-2 text-right">On hand</th><th class="px-3 py-2 text-right">Reserved</th>
+          <th class="px-3 py-2 text-right">Available</th></tr>
+    </thead>
+    <tbody class="divide-y divide-slate-800 bg-slate-950/40">
+      {% for row in stock %}
+        <tr>
+          <td class="px-3 py-2 text-slate-200">{{ row.product.name }}</td>
+          <td class="px-3 py-2 text-slate-400">{{ row.warehouse.name }}
+            <span class="text-xs text-slate-600">&middot; weight {{ row.warehouse.shipping_cost_weight }}</span></td>
+          <td class="px-3 py-2 text-right tabular-nums text-slate-300">{{ row.qty_on_hand }}</td>
+          <td class="px-3 py-2 text-right tabular-nums text-amber-400">{{ row.qty_reserved }}</td>
+          <td class="px-3 py-2 text-right tabular-nums font-medium text-slate-100">{{ row.qty_available }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
