@@ -2,61 +2,52 @@
 
 **Status: NOT STARTED**
 
-**Flow A works end to end.** Build a quotation, watch the per-line ceiling check and the
-margin update by HTMX swap, submit, get routed to Manager then Finance automatically,
-approve, split 4 + 2 across two warehouses at cost 6.80, invoice the one-time lines only,
-record a payment, reach PAID. 88 tests, all passing, none skipped.
+**Both demo flows now run end to end.** Every MUST-have screen exists.
 
-Remaining MUST-have work is the customer portal.
+Flow A: build a quotation, watch the ceiling check and margin update by HTMX swap, accept
+an upsell suggestion, submit, route to Manager then Finance automatically, approve, split
+4 + 2 across two warehouses at cost 6.80, invoice the one-time lines only, record a
+payment, reach PAID.
+
+Flow B: open the portal on a signed token, comment on a line, counter at 15 percent, watch
+the quotation re-enter approval on its own with a Manager step and no Finance step, approve
+internally, confirm in the portal.
+
+Seven of the eight acceptance criteria are demonstrable today. **139 tests, all passing.**
 
 ---
 
-## T-14 and T-15 — Customer portal access and the re-approval loop
+## T-18 — Verification pass against the eight acceptance criteria
 
-**Flow B, and the best moment in the demo.** ADR-004 is Accepted and
-`core/services/negotiation.py` is a written contract with signatures and docstrings —
-`resolve_token`, `portal_status`, `portal_link`, `add_comment`, `submit_counter_offer`,
-`confirm`. This task fills in the bodies and builds the portal app's screens.
+**This is the gate.** BACKLOG says P1 does not start until it passes, and any failure
+becomes a task rather than a note.
 
-### The rules that are not negotiable
+AC-2, AC-3, AC-4, AC-5, AC-6, AC-7 and AC-8 have each been driven through the real views
+and asserted. What remains is to run all eight in one sitting, by hand, against a freshly
+seeded database, and record the result.
 
-- A signed token grants access to **exactly one** quotation, enforced server-side
-  (invariant 12). Changing the token to reach another quotation returns **403**, never
-  that quotation and never a redirect to the internal login.
-- Portal views must **not** sit behind `login_required` and must **never** read
-  `request.user`. A customer has no account. Audit rows for portal actions carry a null
-  actor and attribute through the quotation's customer.
-- Visually distinct from the internal workspace. PDF §7 requires a genuinely separate
-  restricted view, not an internal screen relabelled. The `portal` app already exists with
-  its own reserved `urls.py` mounted at `/portal/`; it needs its own base template too.
-- **A counter-discount replaces the targeted line's discount. It does not stack as a
-  second order-level discount.** Beta is Silver with a 10% ceiling; a 15% counter is 5
-  points over, which is the Manager-only band and matches DEMO B5. Stacking it on the
-  line's existing 8% gives roughly 21 points over, pulls in Finance, and strands the demo
-  script waiting for an approval it never shows.
+### The one that is not yet proven
+
+**AC-1** — sign up or log in, then set up a discount tier, a warehouse and a subscription
+plan, and confirm all three persist and are visible on reload. The rows exist and the
+admin screens exist, but nobody has performed that criterion as written from a clean
+database. Do it and record it.
+
+Note the wording is *sign up* or log in. There is a login page but **no signup page** —
+FR-01 asks for one. Decide whether to build it or to record its absence honestly; if it is
+built, decide and write down whether self-signup may create a MANAGER or FINANCE account,
+because an unauthenticated visitor granting themselves approval rights would make the whole
+governance story hollow.
 
 ### Acceptance
 
-- [ ] Token-scoped access to one quotation; a tampered or unknown token returns 403.
-- [ ] Status shown as Sent / Under Negotiation / Confirmed — a display mapping over
-      `stage`, not a second stored field (ADR-010).
-- [ ] Line-level comments and change requests, append-only.
-- [ ] Counter-discount re-scores through `risk.py`; if over threshold the quotation
-      **automatically** re-enters `PENDING_APPROVAL` with fresh steps (AC-7, invariant 13).
-- [ ] Confirm Quotation works and is reflected internally.
-- [ ] Portal link copyable from the internal quotation screen. No email is sent (ADR-004).
-
-### Verification plan
-
-Drive it the way Flow A was verified — through the real views, as HTTP requests:
-
-1. Open the seeded Beta portal token; confirm 200 and that no internal nav is reachable.
-2. Swap the token for another quotation's and confirm **403**, not that quotation.
-3. Post a line comment, then a 15% counter; confirm the score becomes 5.00 and the
-   quotation moves to `PENDING_APPROVAL` with a fresh Manager step and no Finance step.
-4. Approve internally, confirm in the portal, and check the stage reaches `CONFIRMED`.
+- [ ] All eight criteria run by hand against  + , results recorded.
+- [ ] Any failure becomes a numbered task, not a note.
+- [ ]  Round 4 written from the result.
 
 ### Then what
 
-T-18, the verification pass over all eight acceptance criteria. AC-1 through AC-6 and AC-8
-are already demonstrable; AC-7 is what the portal adds.
+P1, in the order the backlog already sets: T-20 hybrid billing schedules (ADR-008 must be
+closed first), T-21 deal health (ADR-007), T-22 pipeline Kanban, T-23 reporting. Then the
+three PDF section 8 deliverables: the architecture diagram, the what-we-would-build-next
+note, and the rehearsed recording.
