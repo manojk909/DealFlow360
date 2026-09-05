@@ -142,8 +142,91 @@
   </div>
 </section>
 
-<p class="mt-10 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">
-  Asking a question, proposing a different discount and confirming are being added next.
-</p>
+{% if error %}
+  <p class="mt-8 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{{ error }}</p>
+{% endif %}
+{% if sent %}
+  <p class="mt-8 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{{ sent }}</p>
+{% endif %}
+
+{% if can_act %}
+  <section class="mt-10 space-y-4">
+
+    <form method="post" action="{% url 'portal:comment' token %}"
+          class="rounded-xl border border-slate-200 bg-white p-5">
+      {% csrf_token %}
+      <h2 class="text-sm font-semibold text-slate-900">Ask a question or request a change</h2>
+      <div class="mt-3 space-y-3">
+        <label class="block text-xs text-slate-500">About
+          <select name="line_id" class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900">
+            <option value="">The quotation as a whole</option>
+            {% for line in lines %}<option value="{{ line.pk }}">{{ line.product.name }}</option>{% endfor %}
+          </select>
+        </label>
+        <textarea name="body" rows="3" required
+                  placeholder="For example: can we push the setup to next month?"
+                  class="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"></textarea>
+      </div>
+      <button type="submit" class="mt-3 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">
+        Send message
+      </button>
+    </form>
+
+    <form method="post" action="{% url 'portal:counter' token %}"
+          class="rounded-xl border border-sky-200 bg-sky-50/60 p-5">
+      {% csrf_token %}
+      <h2 class="text-sm font-semibold text-slate-900">Propose a different discount</h2>
+      <p class="mt-1 text-xs text-slate-500">
+        This replaces the discount on the item you choose. Your account team reviews every
+        proposal before it takes effect.
+      </p>
+      <div class="mt-3 flex flex-wrap items-end gap-3">
+        <label class="text-xs text-slate-500">On
+          <select name="line_id" class="mt-1 block rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900">
+            <option value="">Every item</option>
+            {% for line in lines %}<option value="{{ line.pk }}">{{ line.product.name }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="text-xs text-slate-500">Discount
+          <span class="mt-1 flex items-center gap-1">
+            <input type="number" name="counter_discount_pct" min="0" max="100" step="0.5" required
+                   class="block w-24 rounded-lg border border-slate-300 px-3 py-2 text-right text-sm tabular-nums text-slate-900">
+            <span class="text-sm text-slate-500">%</span>
+          </span>
+        </label>
+        <button type="submit" class="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500">
+          Submit request
+        </button>
+      </div>
+      <input type="text" name="body" placeholder="Add a note (optional)"
+             class="mt-3 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900">
+    </form>
+
+    <form method="post" action="{% url 'portal:confirm' token %}"
+          class="rounded-xl border border-emerald-200 bg-emerald-50/60 p-5">
+      {% csrf_token %}
+      <h2 class="text-sm font-semibold text-slate-900">Happy with this?</h2>
+      {% if awaiting_approval %}
+        <p class="mt-1 text-xs text-slate-500">
+          Your last request is still with the account team. You will be able to confirm
+          once they have come back to you.
+        </p>
+        <button type="submit" disabled
+                class="mt-3 cursor-not-allowed rounded-lg bg-slate-300 px-4 py-2 text-sm font-semibold text-white">
+          Confirm quotation
+        </button>
+      {% else %}
+        <p class="mt-1 text-xs text-slate-500">
+          Confirming accepts the quotation as shown above and sends it to our fulfilment team.
+        </p>
+        <button type="submit"
+                class="mt-3 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">
+          Confirm quotation
+        </button>
+      {% endif %}
+    </form>
+
+  </section>
+{% endif %}
 
 {% endblock %}

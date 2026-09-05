@@ -28,6 +28,8 @@ the demo script one approval short.
 from decimal import Decimal
 
 from django.core import signing
+from django.db import transaction
+from django.utils import timezone
 
 
 class PortalAccessDenied(Exception):
@@ -140,7 +142,36 @@ def add_comment(quotation, body, line=None):
     Returns:
         The created `core.models.PortalMessage`.
     """
-    raise NotImplementedError("T-15 — portal negotiation and the re-approval loop")
+    from core.models import PortalMessage, Quotation
+    from core.services import approval
+
+    if not (body or "").strip():
+        raise ValueError("A comment cannot be empty.")
+    if line is not None and line.quotation_id != quotation.pk:
+        raise ValueError("That line belongs to a different quotation.")
+
+    with transaction.atomic():
+        message = PortalMessage.objects.create(
+            quotation=quotation,
+            quotation_line=line,
+            author=PortalMessage.Author.CUSTOMER,
+            body=body.strip(),
+        )
+        if quotation.stage == Quotation.Stage.SENT:
+            quotation.stage = Quotation.Stage.UNDER_NEGOTIATION
+        quotation.last_activity_at = timezone.now()
+        quotation.save(update_fields=["stage", "last_activity_at"])
+
+        # actor is None: a customer has no User row (ADR-004). Attribution runs through
+        # the quotation's customer.
+        approval.record(
+            quotation,
+            action="PORTAL_COMMENT",
+            reason=(f"{quotation.customer.name} commented"
+                    + (f" on {line.product.name}" if line else "")
+                    + f": {body.strip()[:120]}"),
+        )
+    return message
 
 
 def submit_counter_offer(quotation, counter_discount_pct, line=None, body=""):
@@ -172,7 +203,65 @@ def submit_counter_offer(quotation, counter_discount_pct, line=None, body=""):
         ValueError: if `line` belongs to a different quotation, or the percentage is out
             of range.
     """
-    raise NotImplementedError("T-15 — portal negotiation and the re-approval loop")
+    from core.models import PortalMessage, Quotation
+    from core.services import approval, pricing, risk
+
+    counter = Decimal(counter_discount_pct)
+    if counter < 0 or counter > 100:
+        raise ValueError(f"A counter-discount must be between 0 and 100, got {counter}.")
+    if line is not None and line.quotation_id != quotation.pk:
+        raise ValueError("That line belongs to a different quotation.")
+    if quotation.stage not in {
+        Quotation.Stage.SENT,
+        Quotation.Stage.UNDER_NEGOTIATION,
+        Quotation.Stage.APPROVED,
+    }:
+        raise ValueError(f"A quotation in {quotation.stage} cannot be negotiated.")
+
+    with transaction.atomic():
+        PortalMessage.objects.create(
+            quotation=quotation,
+            quotation_line=line,
+            author=PortalMessage.Author.CUSTOMER,
+            body=(body or "").strip(),
+            counter_discount_pct=counter,
+        )
+
+        # REPLACE, never stack. Adding this as a second order-level discount would
+        # compound with the discount already on the line and roughly double how far over
+        # ceiling it lands — see the module docstring, this is load-bearing for Flow B.
+        targets = [line] if line is not None else list(quotation.lines.all())
+        for target in targets:
+            target.discount_pct = counter
+            target.save(update_fields=["discount_pct"])
+
+        pricing.recompute_quotation(quotation)
+        result = risk.score_for_quotation(quotation)
+        needs_manager, needs_finance = approval.required_levels(result.score)
+
+        quotation.risk_score = result.score
+        quotation.stage = Quotation.Stage.UNDER_NEGOTIATION
+        quotation.last_activity_at = timezone.now()
+        quotation.save(update_fields=["risk_score", "stage", "last_activity_at"])
+
+        approval.record(
+            quotation,
+            action="COUNTER_OFFER_RECEIVED",
+            reason=(
+                f"{quotation.customer.name} proposed {counter}% on "
+                + (line.product.name if line else "every line")
+                + f". Re-scored to {result.score}."
+            ),
+            payload={"counter_discount_pct": str(counter), "risk_score": str(result.score)},
+        )
+
+        if needs_manager or needs_finance:
+            # Invariant 13 / BR-6: over threshold, the quotation re-enters approval on
+            # its own with FRESH steps. No rep asks for this and no customer requests it.
+            approval.submit(quotation, actor=None)
+
+    quotation.refresh_from_db()
+    return quotation
 
 
 def confirm(quotation):
@@ -191,4 +280,30 @@ def confirm(quotation):
         ValueError: if the quotation is not in a stage that can be confirmed, or an
             approval is outstanding.
     """
-    raise NotImplementedError("T-15 — portal negotiation and the re-approval loop")
+    from core.models import ApprovalStep, Quotation
+    from core.services import approval
+
+    confirmable = {
+        Quotation.Stage.APPROVED,
+        Quotation.Stage.SENT,
+        Quotation.Stage.UNDER_NEGOTIATION,
+    }
+    if quotation.stage not in confirmable:
+        raise ValueError(
+            f"A quotation in {quotation.stage} cannot be confirmed by the customer."
+        )
+    if quotation.approval_steps.filter(status=ApprovalStep.Status.PENDING).exists():
+        raise ValueError(
+            "This quotation is waiting on an internal approval and cannot be confirmed yet."
+        )
+
+    with transaction.atomic():
+        quotation.stage = Quotation.Stage.CONFIRMED
+        quotation.last_activity_at = timezone.now()
+        quotation.save(update_fields=["stage", "last_activity_at"])
+        approval.record(
+            quotation,
+            action="CUSTOMER_CONFIRMED",
+            reason=f"{quotation.customer.name} confirmed the quotation in the portal.",
+        )
+    return quotation

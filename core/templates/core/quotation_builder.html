@@ -60,6 +60,47 @@
         </p>
       {% endif %}
 
+<div class="rounded-lg border border-slate-800 bg-slate-900 p-3">
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">Customer portal</h3>
+        {% if portal_url %}
+          <p class="mt-2 text-xs text-slate-500">
+            One link, one quotation. Anything else returns 403.
+          </p>
+          <div class="mt-2 flex gap-1">
+            <input id="portal-link" type="text" readonly value="{{ portal_url }}"
+                   class="w-full truncate rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-300">
+            <button type="button" id="copy-portal-link"
+                    class="shrink-0 rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800">Copy</button>
+          </div>
+          <a href="{{ portal_url }}" target="_blank" rel="noopener"
+             class="mt-2 inline-block text-xs text-sky-400 no-underline hover:text-sky-300">Open portal view &rarr;</a>
+          <script>
+            document.getElementById("copy-portal-link").addEventListener("click", function () {
+              const field = document.getElementById("portal-link");
+              field.select();
+              navigator.clipboard.writeText(field.value).then(() => {
+                this.textContent = "Copied";
+                setTimeout(() => { this.textContent = "Copy"; }, 1500);
+              });
+            });
+          </script>
+        {% elif can_share %}
+          <form method="post" action="{% url 'core:quotation_share' quotation.pk %}" class="mt-2">
+            {% csrf_token %}
+            <button type="submit" class="w-full rounded bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700">
+              Create portal link
+            </button>
+          </form>
+          <p class="mt-2 text-xs text-slate-600">
+            Mints a signed link and marks the quotation Sent. No email is sent &mdash; copy it.
+          </p>
+        {% else %}
+          <p class="mt-2 text-xs text-slate-600">
+            Available once the quotation is approved.
+          </p>
+        {% endif %}
+      </div>
+
       <div class="rounded-lg border border-slate-800 bg-slate-900 p-3">
         <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">Upsell suggestions</h3>
         <p class="mt-2 text-xs text-slate-600">

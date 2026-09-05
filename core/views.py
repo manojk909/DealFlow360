@@ -32,7 +32,7 @@ from core.models import (
     Stock,
     User,
 )
-from core.services import approval, billing, fulfilment, pricing, risk
+from core.services import approval, billing, fulfilment, negotiation, pricing, risk
 
 
 # --------------------------------------------------------------------- health
@@ -227,6 +227,14 @@ def quotation_builder(request, pk):
         (category, list(category.products.filter(active=True).order_by("name")))
         for category in Category.objects.order_by("name")
     ]
+    context["portal_url"] = (
+        negotiation.portal_link(quotation, request) if quotation.portal_token else None
+    )
+    context["can_share"] = quotation.stage in {
+        Quotation.Stage.APPROVED,
+        Quotation.Stage.SENT,
+        Quotation.Stage.UNDER_NEGOTIATION,
+    }
     context["editable"] = quotation.stage in {
         Quotation.Stage.DRAFT,
         Quotation.Stage.UNDER_NEGOTIATION,
@@ -663,3 +671,26 @@ def billing_pay(request, pk):
     except (ValueError, billing.OverpaymentError) as exc:
         return redirect(f"/workspace/invoices/{pk}/?error={quote(str(exc))}")
     return redirect("core:billing_detail", pk=pk)
+
+
+@require_POST
+@login_required
+def quotation_share(request, pk):
+    """Mint the portal link and mark the quotation as sent (ADR-010: APPROVED -> SENT).
+
+    No email is sent — ADR-004 closed that. The rep copies the link from the screen.
+    """
+    quotation = get_object_or_404(Quotation, pk=pk)
+    if quotation.stage != Quotation.Stage.APPROVED:
+        return redirect("core:quotation_builder", pk=pk)
+
+    negotiation.portal_link(quotation, request)
+    quotation.stage = Quotation.Stage.SENT
+    quotation.save(update_fields=["stage"])
+    approval.record(
+        quotation,
+        action="PORTAL_LINK_SHARED",
+        actor=request.user,
+        reason="Portal link created and shared with the customer.",
+    )
+    return redirect("core:quotation_builder", pk=pk)

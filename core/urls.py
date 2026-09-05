@@ -35,6 +35,7 @@ urlpatterns = [
     path("workspace/quotations/<int:pk>/lines/<int:line_id>/delete/", views.line_delete, name="line_delete"),
     path("workspace/quotations/<int:pk>/order-discount/", views.order_discount, name="order_discount"),
     path("workspace/quotations/<int:pk>/submit/", views.quotation_submit, name="quotation_submit"),
+    path("workspace/quotations/<int:pk>/share/", views.quotation_share, name="quotation_share"),
 
     # T-16 — fulfilment
     path("workspace/fulfilment/", views.fulfilment_list, name="fulfilment_list"),

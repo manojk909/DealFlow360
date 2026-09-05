@@ -16,4 +16,7 @@ app_name = "portal"
 
 urlpatterns = [
     path("<str:token>/", views.quotation_view, name="quotation"),
+    path("<str:token>/comment/", views.comment_view, name="comment"),
+    path("<str:token>/counter/", views.counter_view, name="counter"),
+    path("<str:token>/confirm/", views.confirm_view, name="confirm"),
 ]
