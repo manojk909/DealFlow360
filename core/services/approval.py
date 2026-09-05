@@ -6,7 +6,8 @@ Implements FR-13, FR-15 and FR-16. Owned by **T-10**.
 **The rep never requests approval.** `submit()` scores the quotation, reads the
 `ApprovalChainRule` rows and generates the steps the chain requires, on its own. That is
 AC-3 and it is the product's whole thesis; a "request approval" button anywhere in the
-application is a bug.
+application is a bug. The builder's button says *Submit for Approval* because that is what
+the rep does — submit the quote — and the system decides whether an approval follows.
 
 Invariants this module is responsible for:
 
@@ -18,6 +19,9 @@ Invariants this module is responsible for:
 Reject and return-for-revision are **different outcomes** (ADR-010): reject is terminal,
 return sends the quotation back to DRAFT for the rep to fix.
 """
+
+from django.db import transaction
+from django.utils import timezone
 
 
 class ApprovalConfigurationError(Exception):
@@ -37,6 +41,14 @@ class ApprovalPermissionError(Exception):
     """
 
 
+# Which roles may act on which step level. ADMIN is included so a single seeded admin can
+# drive an end-to-end demo; REP is deliberately absent from both.
+_ROLES_FOR_LEVEL = {
+    "MANAGER": {"MANAGER", "ADMIN"},
+    "FINANCE": {"FINANCE", "ADMIN"},
+}
+
+
 def required_levels(score):
     """Which approver levels a score requires, read from `ApprovalChainRule`.
 
@@ -53,7 +65,41 @@ def required_levels(score):
     Raises:
         ApprovalConfigurationError: if no rule matches, or more than one does.
     """
-    raise NotImplementedError("T-10 — automatic approval routing and audit trail")
+    from core.models import ApprovalChainRule
+
+    rules = list(
+        ApprovalChainRule.objects.filter(score_min__lte=score, score_max__gte=score)
+    )
+    if not rules:
+        raise ApprovalConfigurationError(
+            f"No ApprovalChainRule covers a risk score of {score}. The bands must tile "
+            f"the whole range — refusing to route rather than skipping governance."
+        )
+    if len(rules) > 1:
+        overlapping = ", ".join(f"{r.score_min}-{r.score_max}" for r in rules)
+        raise ApprovalConfigurationError(
+            f"Risk score {score} matches {len(rules)} overlapping ApprovalChainRules "
+            f"({overlapping}). Bands must not overlap."
+        )
+    rule = rules[0]
+    return rule.requires_manager, rule.requires_finance
+
+
+def record(quotation, action, actor=None, reason="", payload=None):
+    """Append one AuditLog row. The only writer of that table.
+
+    `actor` is `None` for portal actions — a customer has no `User` row (ADR-004), and
+    attribution runs through the quotation's Customer instead.
+    """
+    from core.models import AuditLog
+
+    return AuditLog.objects.create(
+        quotation=quotation,
+        actor=actor,
+        action=action,
+        reason=reason or "",
+        payload=payload or {},
+    )
 
 
 def submit(quotation, actor):
@@ -85,7 +131,116 @@ def submit(quotation, actor):
         ApprovalConfigurationError: propagated from `required_levels()`.
         ValueError: if the quotation's stage cannot be submitted from.
     """
-    raise NotImplementedError("T-10 — automatic approval routing and audit trail")
+    from core.models import ApprovalStep, Quotation
+    from core.services import pricing, risk
+
+    submittable = {Quotation.Stage.DRAFT, Quotation.Stage.UNDER_NEGOTIATION}
+    if quotation.stage not in submittable:
+        raise ValueError(
+            f"A quotation in {quotation.stage} cannot be submitted; expected one of "
+            f"{sorted(submittable)}."
+        )
+    if not quotation.lines.exists():
+        raise ValueError("An empty quotation cannot be submitted.")
+
+    with transaction.atomic():
+        pricing.recompute_quotation(quotation)
+        result = risk.score_for_quotation(quotation)
+        needs_manager, needs_finance = required_levels(result.score)
+
+        # A resubmit re-scores from scratch: stale steps from a previous round would
+        # otherwise sit alongside the new ones.
+        quotation.approval_steps.all().delete()
+
+        steps = []
+        if needs_manager:
+            steps.append(ApprovalStep(quotation=quotation, sequence=1, level=ApprovalStep.Level.MANAGER))
+        if needs_finance:
+            steps.append(
+                ApprovalStep(quotation=quotation, sequence=len(steps) + 1, level=ApprovalStep.Level.FINANCE)
+            )
+        ApprovalStep.objects.bulk_create(steps)
+
+        quotation.risk_score = result.score
+        quotation.stage = (
+            Quotation.Stage.PENDING_APPROVAL if steps else Quotation.Stage.APPROVED
+        )
+        quotation.last_activity_at = timezone.now()
+        quotation.save(update_fields=["risk_score", "stage", "last_activity_at"])
+
+        record(
+            quotation,
+            action="SUBMITTED_FOR_APPROVAL" if steps else "AUTO_APPROVED",
+            actor=actor,
+            reason=(
+                f"Automatic: blended risk score {result.score} routed to "
+                f"{' then '.join(s.level for s in steps)}."
+                if steps
+                else "Automatic: risk score 0.00 — no approval required."
+            ),
+            payload={
+                "risk_score": str(result.score),
+                "steps": [s.level for s in steps],
+                "breakdown": [
+                    {
+                        "label": line.label,
+                        "category": line.category,
+                        "given_pct": str(line.given_pct),
+                        "allowed_pct": str(line.allowed_pct),
+                        "over_by_pct": str(line.over_by_pct),
+                    }
+                    for line in result.breakdown
+                ],
+            },
+        )
+    return steps
+
+
+def _act(step, actor, reason, status, action, next_stage, clear_remaining=False):
+    """Shared body for approve / reject / return. Enforces the rules once, not three times."""
+    from core.models import ApprovalStep, Quotation
+
+    if step.status != ApprovalStep.Status.PENDING:
+        raise ValueError(f"Step {step.pk} is already {step.status}.")
+    if not (reason or "").strip():
+        raise ValueError("A reason is required on every approval action (BR-3).")
+    if actor is None or actor.role not in _ROLES_FOR_LEVEL.get(step.level, set()):
+        raise ApprovalPermissionError(
+            f"Role {getattr(actor, 'role', None)} may not act on a {step.level} step."
+        )
+
+    with transaction.atomic():
+        step.status = status
+        step.actor = actor
+        step.reason = reason
+        step.acted_at = timezone.now()
+        step.save(update_fields=["status", "actor", "reason", "acted_at"])
+
+        quotation = step.quotation
+        if clear_remaining:
+            quotation.approval_steps.filter(status=ApprovalStep.Status.PENDING).delete()
+
+        if next_stage is None:
+            # Approve: the quotation only advances once nothing is still pending.
+            still_pending = quotation.approval_steps.filter(
+                status=ApprovalStep.Status.PENDING
+            ).exists()
+            stage = quotation.stage if still_pending else Quotation.Stage.APPROVED
+        else:
+            stage = next_stage
+
+        quotation.stage = stage
+        quotation.last_activity_at = timezone.now()
+        quotation.save(update_fields=["stage", "last_activity_at"])
+
+        record(
+            quotation,
+            action=action,
+            actor=actor,
+            reason=reason,
+            payload={"step": step.sequence, "level": step.level},
+        )
+    return step.quotation
 
 
 def approve(step, actor, reason):
@@ -93,20 +248,10 @@ def approve(step, actor, reason):
 
     Writes the audit row before returning, always — invariant 4 is not conditional.
     Moves the quotation to APPROVED only when no step remains PENDING (invariant 1).
-
-    Args:
-        step: a PENDING `core.models.ApprovalStep`.
-        actor: the acting `core.models.User`; role must match `step.level`.
-        reason: required non-empty string (BR-3).
-
-    Returns:
-        The updated `Quotation`.
-
-    Raises:
-        ApprovalPermissionError: if the actor's role does not match the step level.
-        ValueError: if the step is not PENDING, or `reason` is empty.
     """
-    raise NotImplementedError("T-10 — automatic approval routing and audit trail")
+    from core.models import ApprovalStep
+
+    return _act(step, actor, reason, ApprovalStep.Status.APPROVED, "APPROVED", None)
 
 
 def reject(step, actor, reason):
@@ -114,11 +259,12 @@ def reject(step, actor, reason):
 
     Any still-pending steps are left as PENDING rather than cancelled, so the audit trail
     shows exactly how far the deal got before it died.
-
-    Raises:
-        ApprovalPermissionError, ValueError: as for `approve()`.
     """
-    raise NotImplementedError("T-10 — automatic approval routing and audit trail")
+    from core.models import ApprovalStep, Quotation
+
+    return _act(
+        step, actor, reason, ApprovalStep.Status.REJECTED, "REJECTED", Quotation.Stage.REJECTED
+    )
 
 
 def return_for_revision(step, actor, reason):
@@ -128,28 +274,15 @@ def return_for_revision(step, actor, reason):
     marked RETURNED, the quotation returns to DRAFT, and any remaining steps are deleted:
     the next submit re-scores and generates fresh ones, because the numbers will have
     changed.
-
-    Raises:
-        ApprovalPermissionError, ValueError: as for `approve()`.
     """
-    raise NotImplementedError("T-10 — automatic approval routing and audit trail")
+    from core.models import ApprovalStep, Quotation
 
-
-def record(quotation, action, actor=None, reason="", payload=None):
-    """Append one AuditLog row. The only writer of that table.
-
-    `actor` is `None` for portal actions — a customer has no `User` row (ADR-004), and
-    attribution runs through the quotation's Customer instead.
-
-    Args:
-        quotation: the `core.models.Quotation` the action happened to.
-        action: short uppercase verb, e.g. `"APPROVED"`, `"COUNTER_OFFER_RECEIVED"`.
-        actor: `core.models.User` or None.
-        reason: free text; required by BR-3 for approvals, rejections and edits.
-        payload: JSON-serialisable dict of supporting detail, e.g. the score and the
-            per-line breakdown that produced a routing decision.
-
-    Returns:
-        The created `AuditLog`.
-    """
-    raise NotImplementedError("T-10 — automatic approval routing and audit trail")
+    return _act(
+        step,
+        actor,
+        reason,
+        ApprovalStep.Status.RETURNED,
+        "RETURNED_FOR_REVISION",
+        Quotation.Stage.DRAFT,
+        clear_remaining=True,
+    )
