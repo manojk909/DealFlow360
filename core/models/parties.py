@@ -1,11 +1,12 @@
 """
-People and organisations.
+People and organisations — internal users, customer tiers and customers.
 
-T-01 scope is the custom User only. CustomerTier and Customer land in T-02 alongside the
-rest of the P0 schema — see docs/DATA_MODEL.md.
+Customers are deliberately **not** Users: portal access is a signed quotation-scoped
+token, not an account (ADR-004).
 """
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 
@@ -82,3 +83,47 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def get_short_name(self):
         return self.name.split(" ")[0] if self.name else self.email
+
+
+class CustomerTier(models.Model):
+    """
+    Bronze / Silver / Gold, with the tier-level discount ceiling.
+
+    PDF example: Bronze <= 5%, Silver <= 10%, Gold <= 15%. This is one half of a line's
+    effective ceiling; the other half is CategoryDiscountCeiling, and the **stricter of
+    the two wins** (DATA_MODEL.md invariant 14, ADR-005).
+    """
+
+    name = models.CharField(max_length=40, unique=True)
+    max_discount_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Tier-level discount ceiling, in percentage points.",
+    )
+
+    class Meta:
+        ordering = ["max_discount_pct", "name"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(max_discount_pct__gte=0) & models.Q(max_discount_pct__lte=100),
+                name="customer_tier_max_discount_in_range",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.name} (<= {self.max_discount_pct}%)"
+
+
+class Customer(models.Model):
+    """The buying organisation. Has no login — see ADR-004."""
+
+    name = models.CharField(max_length=160, unique=True)
+    email = models.EmailField()
+    tier = models.ForeignKey(CustomerTier, on_delete=models.PROTECT, related_name="customers")
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.tier.name})"

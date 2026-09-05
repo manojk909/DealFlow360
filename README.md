@@ -95,7 +95,29 @@ python manage.py migrate
 This creates `db.sqlite3` in the repository root. It is gitignored — everyone builds their
 own from migrations, and later from the seed script.
 
-### 5. Create an admin account
+### 5. Load the demo data
+
+```bash
+python manage.py seed_demo
+```
+
+This is the fastest way to get a usable database. It creates the full demo dataset from
+`docs/DEMO.md` — users, tiers, categories, discount ceilings, approval chain rules,
+customers, ten products, subscription plans, two warehouses with stock, and five
+quotations across the stages. It is idempotent: running it twice gives the same state.
+
+It seeds eight accounts, all with the password **`dealflow360`**:
+
+| Email | Role |
+|---|---|
+| `rep@dealflow.test` | Sales Rep |
+| `manager@dealflow.test` | Sales Manager |
+| `finance@dealflow.test` | Finance |
+| `admin@dealflow.test` | Admin (superuser — this is the one that opens `/admin/`) |
+
+`rep2@`, `manager2@`, `finance2@` and `admin2@` exist as a mid-demo fallback set.
+
+**Or** create your own account instead:
 
 ```bash
 python manage.py createsuperuser
@@ -145,10 +167,13 @@ SQLite is a single file, so a reset takes seconds:
 ```bash
 rm db.sqlite3          # Windows PowerShell: Remove-Item db.sqlite3
 python manage.py migrate
-python manage.py createsuperuser
+python manage.py seed_demo
 ```
 
-Once T-03 lands, `python manage.py seed_demo` will reseed the full demo dataset instead.
+`seed_demo` alone is usually enough — it wipes and rebuilds every demo row in one
+transaction, so the file only needs deleting if the schema itself is in a bad state.
+Accounts you created yourself are preserved across a reseed; only the demo rows are
+replaced.
 
 ---
 
@@ -157,10 +182,13 @@ Once T-03 lands, `python manage.py seed_demo` will reseed the full demo dataset 
 ```
 config/                 settings.py, urls.py, wsgi.py
 core/                   the internal application
-  models/               split by domain — parties.py holds the custom User
+  models/               split by domain: catalogue, parties, sales, inventory, billing
+  management/commands/  seed_demo.py — rebuilds the exact docs/DEMO.md state
   templates/core/       base.html (dark theme shell) + health.html
   admin.py              backend configuration area registrations
   views.py, urls.py     health check for now; rep workspace lands in T-11
+portal/                 customer-facing app, mounted at /portal/ — urls reserved,
+                        views land in T-14 (token-scoped, no login, ADR-004)
 docs/                   SPEC, ARCHITECTURE, DATA_MODEL, DEMO, DECISIONS
 tasks/                  BACKLOG, CURRENT, DONE
 manage.py

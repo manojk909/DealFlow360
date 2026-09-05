@@ -153,6 +153,10 @@ BillingScheduleEntry stays out of P0 and lands with T-20).
 - Order total applies the order-level discount after line discounts.
 - Margin amount and percentage computed from product cost.
 - Unit tests covering zero discount, full line discount, and a mixed line-plus-order discount.
+- **Delete `_totals()` from `core/management/commands/seed_demo.py`** and call this service
+  instead. The seed carries a provisional copy of the arithmetic so quotation cards are not
+  all 0.00 before T-08 lands; two implementations of the same formula is debt, and it is
+  paid off here.
 - Server is the single source of truth for totals; the UI displays what the server computed.
 
 ### T-09 — Blended discount risk score
@@ -165,7 +169,10 @@ BillingScheduleEntry stays out of P0 and lands with T-20).
 - Reproduces PDF §10 example 1: Gold customer, Hardware 12% (ceiling 15) passes,
   Service 18% (ceiling 10) is 8 points over and flags the quotation.
 - Reproduces PDF §10 example 2: several lines 2–3 points over accumulate into a flag.
-- Unit tests asserting both examples. These two tests are the specification.
+- Unit tests asserting both examples. These two tests are the specification. They already
+  exist at `core/tests/test_risk.py` and currently skip; this task is what un-skips them.
+- **Delete `_risk_score()` from `core/management/commands/seed_demo.py`** and call this
+  service instead, for the same reason as T-08.
 
 ### T-10 — Automatic approval routing and audit trail
 **Goal.** FR-13, FR-15, FR-16, BR-2, BR-3.
@@ -230,6 +237,11 @@ BillingScheduleEntry stays out of P0 and lands with T-20).
 - If over threshold, it **automatically** re-enters PENDING_APPROVAL with fresh steps (AC-7).
 - If under threshold on confirm, it goes straight to fulfilment.
 - Confirm Quotation works and is reflected internally.
+- **A counter-discount replaces the targeted line's discount; it does not stack on top as a
+  second order-level discount.** This is load-bearing for DEMO Flow B: Beta's 15% counter
+  against a 10% Silver ceiling is 5 points over, which is the Manager-only band. Stacking it
+  onto the line's existing 8% would give roughly 21 points over and pull in Finance, and
+  DEMO B5 would stall. Recorded during T-03 because the seeded data depends on it.
 
 ## Fulfilment and billing
 
@@ -244,6 +256,11 @@ BillingScheduleEntry stays out of P0 and lands with T-20).
 - Invariants 6, 7 and 8 hold — no allocation exceeds available stock, reserved never
   exceeds on-hand.
 - With the seeded stock (4 + 10, order of 6) the split genuinely triggers.
+- **Lines for non-stocked products must be skipped, not backordered.** Services and
+  Subscriptions have no `Stock` rows at all — correctly, since you do not warehouse an
+  engagement — so a naive implementation reports the Onsite Setup Service line as a total
+  backorder and the fulfilment screen looks broken on stage. Found while seeding; decide it
+  here rather than at the demo.
 
 ### T-17 — Order confirmation, invoice and payment
 **Goal.** FR-20.
