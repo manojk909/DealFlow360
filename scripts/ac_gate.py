@@ -163,10 +163,18 @@ observe("AC-5", "non-warehoused line named as skipped", "skipped, not backordere
 
 rep.post(f"/workspace/fulfilment/{quote.pk}/accept/")
 quote.refresh_from_db()
+# Only the warehouses that actually reserved something. Comparing the whole dict broke
+# when the seed gained a third warehouse: North Hub is the dearest, so it correctly
+# reserves nothing, but an exact comparison still saw an extra key at zero. The claim
+# being made is "pulled from the CORRECT warehouses", so assert the non-zero set.
 reserved = {s.warehouse.name: s.qty_reserved
-            for s in Stock.objects.filter(product=laptop).select_related("warehouse")}
+            for s in Stock.objects.filter(product=laptop).select_related("warehouse")
+            if s.qty_reserved}
 observe("AC-5", "stock pulled from the correct warehouses", reserved,
         {"Main Warehouse": 4, "East Depot": 2})
+dearest = Warehouse.objects.order_by("-shipping_cost_weight").first()
+observe("AC-5", f"nothing pulled from the dearest warehouse ({dearest.name})",
+        Stock.objects.get(product=laptop, warehouse=dearest).qty_reserved, 0)
 observe("AC-5", "stage fulfilled", quote.stage, "FULFILLED")
 
 # ---------------------------------------------------------------------------- AC-6
