@@ -5,6 +5,141 @@ completion protocol.
 
 ---
 
+## Services integration contract
+
+*Completed 05 Sep 2026. Commit `d54f1e0`. Not a numbered backlog task — done before any
+service body is written, so the tasks that depend on each other cannot disagree about
+shapes.*
+
+Eight modules under `core/services/`, **39 functions and 11 dataclasses/exceptions**, each
+a signature and a docstring with a `NotImplementedError` body naming the task that fills it
+in. Verified by introspection: every module has a docstring, every public function has a
+docstring, and every one raises `NotImplementedError`.
+
+| Module | Functions | Owner task |
+|---|---|---|
+| `pricing.py` | 5 | T-08 |
+| `risk.py` | 3 | T-09 |
+| `approval.py` | 6 | T-10 |
+| `fulfilment.py` | 6 | T-16 (T-24 for consolidation) |
+| `billing.py` | 6 | T-17, T-20 |
+| `negotiation.py` | 6 | T-14, T-15 |
+| `upsell.py` | 3 | T-19 |
+| `health.py` | 4 | T-21 |
+
+**Decisions the contract pins down**, beyond argument lists:
+
+- `risk.score_quotation()` stays **pure** — plain dicts and Decimals, no ORM — which is what
+  lets the specification tests assert both PDF examples with no fixtures.
+  `score_for_quotation()` is the thin adapter beside it.
+- `approval.required_levels()` raises rather than falling through to "no approval needed"
+  when no chain rule matches. Skipping governance silently is the failure this product
+  exists to prevent.
+- `fulfilment.accept_split()` recomputes at commit time instead of trusting the suggestion
+  the screen rendered — stock moves between page load and click.
+- `billing.record_payment()` is the **only** function permitted to write a Payment or move
+  an Invoice status, because invariant 11 cannot be a SQLite constraint.
+- `negotiation.submit_counter_offer()` **replaces** the targeted line's discount rather than
+  stacking an order-level one. This is what keeps DEMO Flow B in the Manager-only band.
+
+**Three functions are blocked, in writing, rather than guessed:**
+`billing.prorate_quantity_change()` on ADR-008, and `health.discount_anomalies()` and
+`health.delivery_slippage()` on ADR-007. Their docstrings say which ADR blocks them and
+why, so nobody quietly invents a threshold the problem statement never gave.
+
+**One change to `core/tests/test_risk.py`.** Its skip guard used to ask "does the module
+import?", which stopped meaning anything the moment `risk.py` existed as a stub. It now
+probes for a *working* implementation and skips on `NotImplementedError`. The skip
+condition changed; no expectation did.
+
+---
+
+## T-02 + T-03 — Full P0 schema and seed script, one migration wave
+
+*Completed 05 Sep 2026. Commit `3c49fea`.*
+
+**Twenty-one models across five domain modules**, one `makemigrations`, one `migrate`.
+
+Beyond T-02's stated entity list this wave also creates `SubscriptionPlan` (P0 as of the A5
+split), plus the SHOULD entities from DATA_MODEL.md — `ProductVariant`, `ProductPair` and
+`BillingScheduleEntry`. That was a judgment call: "full schema from DATA_MODEL.md" in one
+wave means T-19, T-20 and T-25 do not each need their own migration later. Three small
+tables now against three migration waves later.
+
+**Acceptance criteria — verified by exercise.**
+
+| Criterion | How it was verified |
+|---|---|
+| Migration applies cleanly to an empty database | `db.sqlite3` deleted and rebuilt from scratch three times during the task |
+| Unique constraint on Stock (product, warehouse) at DB level | Deliberately inserted a duplicate; refused by `unique_stock_per_product_warehouse` |
+| Invariant 8 (reserved never exceeds on hand) | Deliberately violated; refused by `stock_reserved_not_over_on_hand` |
+| Invariant 9 (RECURRING has a plan, ONE_TIME does not) | Both directions violated; both refused by `recurring_line_has_plan_one_time_does_not` |
+| Invariant 11 (payments never exceed invoice amount) | **Not a database constraint** — SQLite cannot express it without a subquery. Enforced in `billing.record_payment()`, documented on the Invoice model and in the verification output, so its absence is a decision rather than an oversight |
+| `Quotation.stage` uses ADR-010's enum exactly | Ten `TextChoices` members matching the ADR |
+| Everything importable from `core.models`, `check` clean | 21 models re-exported; `manage.py check` silent |
+| `manage.py test` still passes | Green, with the two risk spec tests skipping |
+
+Twelve constraints in total were verified by deliberately violating each one and confirming
+SQLite refused it — not by reading the migration and assuming.
+
+**Seed — `python manage.py seed_demo`.**
+
+Reproduces `docs/DEMO.md` exactly: 8 users, 3 tiers, 3 categories, 3 Gold category ceilings,
+3 approval chain rules, 3 customers, 10 products with costs, 4 variants, 30 price list
+entries, 6 product pairs, 3 subscription plans, 2 warehouses, 8 stock rows and 5 quotations.
+Idempotent — run three times, row counts identical.
+
+**The load-bearing numbers, checked independently.** A verification script that imports
+nothing from `seed_demo` — the arithmetic rewritten fresh from ADR-005 and applied to
+database rows — confirmed:
+
+- Q-2026-0003 (Acme, the PDF worked example) recomputes to **exactly 8.00**: Laptop 12%
+  against a 15% Hardware ceiling contributes 0, Onsite Setup 18% against a 10% Services
+  ceiling contributes 8. The stored `risk_score` snapshot matches.
+- That score matches the `8.00-9999.99` chain rule, which requires **Manager then Finance** —
+  and the two seeded ApprovalStep rows are exactly Manager then Finance, both PENDING.
+- The three chain bands tile with no gap and no overlap.
+- The PDF's second example (17/15, 13/10, 14/12) totals **7.00** and lands in the
+  Manager-only band, so both worked examples are exercised by seeded configuration.
+- **Laptop Pro 14: Main Warehouse 4, East Depot 10, demo order 6.** Main is the cheaper
+  warehouse (1.00 against 1.40) and holds only 4, so ADR-006's single-shipment shortcut
+  cannot fire and the split is forced: 4 + 2, estimated cost 6.80.
+- Flow B: Beta is Silver, scores 0.00 today, and a 15% counter is 5 points over its ceiling —
+  Manager only, so DEMO B5 holds as written.
+
+**Debt taken on deliberately.** `seed_demo` carries provisional copies of the pricing and
+risk arithmetic, marked `PROVISIONAL` in the file, because the seed has to store totals and
+a score before T-08 and T-09 exist, and a quotation list showing 0.00 on every card is not a
+demo. Deleting both is now an acceptance criterion on T-08 and T-09.
+
+**Three integration findings recorded in BACKLOG rather than left for the demo:**
+
+1. **Non-stocked lines must be skipped by the split, not backordered** (T-16). Services and
+   Subscriptions have no Stock rows — correctly — so a naive implementation reports the
+   Onsite Setup Service line as a total backorder and the fulfilment screen looks broken.
+2. **A portal counter replaces a line's discount rather than stacking as a second
+   order-level discount** (T-15). Stacking Beta's 15% onto its existing 8% gives roughly 21
+   points over, pulls in Finance, and strands DEMO B5.
+3. Both provisional seed helpers must be deleted (T-08, T-09).
+
+**Also in this wave.** The `portal` app now exists with its own reserved `urls.py` mounted
+at `/portal/`, and `config/urls.py` only mounts apps — so adding a screen never edits it
+again. The portal has no views yet; T-14 fills them in. `/portal/` returns 404 today, which
+is correct for an empty urlconf.
+
+**Remaining risks.**
+
+- The seed's provisional arithmetic is a second implementation of two formulas. It agrees
+  with ADR-005 today, verified; it will silently rot if ADR-005 changes and only the service
+  is updated. That is why deletion is an acceptance criterion and not a comment.
+- Only Gold has category ceilings, matching DEMO.md. Adding a stricter Services row for
+  Silver would change Flow B's routing and break the demo script — flagged in the seed's
+  docstring, where someone tidying the data would see it.
+- Nothing is registered in Django admin yet, so the seeded configuration is not editable
+  through a screen. T-05, T-06 and T-07 do that, and AC-1 is not demonstrable until they do.
+
+---
+
 ## T-00 — Close the blocking open decisions
 
 *Completed 05 Sep 2026. Ran in parallel with T-01.*

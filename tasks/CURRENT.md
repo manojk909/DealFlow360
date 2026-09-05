@@ -2,90 +2,84 @@
 
 **Status: NOT STARTED**
 
-T-00 and T-01 are done — see `tasks/DONE.md`. The app runs, `AUTH_USER_MODEL` is set to
-`core.User` and was set before the first migration, and the four ADRs that blocked P0 are
-closed. **No P0 task is blocked by an open decision.**
+Done so far — see `tasks/DONE.md`: T-00 (four blocking ADRs closed), T-01 (scaffold),
+T-02 + T-03 (full schema and seed, one migration wave), and the services integration
+contract.
+
+The database rebuilds from scratch with `migrate` + `seed_demo` in seconds, and the seeded
+Acme quotation scores exactly the 8.00 ADR-005 predicts. No P0 task is blocked by an open
+decision.
 
 ---
 
-## T-02 — Schema and migrations for the P0 entities
+## T-04 — Internal auth and role-based access
 
 ### Objective
 
-Turn DATA_MODEL.md's MUST entities into tables, in **one migration wave**, so all four
-tracks can start building against a real schema.
+FR-01. Signup, login, logout, session, and four roles enforced **server-side on every
+action**.
 
 ### Context
 
-T-01 shipped exactly one model — the custom `User` in `core/models/parties.py`. Everything
-else in DATA_MODEL.md is still just a document.
+`core.User` already exists with `role` (`REP | MANAGER | FINANCE | ADMIN`), email as
+`USERNAME_FIELD`, and Django's password hashers. `seed_demo` creates eight accounts, all
+with the password `dealflow360`; only the ADMIN accounts are `is_staff`/`is_superuser`
+today.
 
-**The coordination rule that matters more than the code.** One person runs
-`makemigrations` for this wave. Two developers generating migrations for `core` in parallel
-produces a conflict that breaks `migrate` for everybody, and at hour 20 that is an hour
-nobody has. Announce the schema to the team **before** pushing it.
+What is missing is everything a human uses: there is no login page, no signup page, no
+logout, and no way to check a role before an action.
 
-**Decisions already made that this task must honour:**
+**The part that is actually scored.** PDF §6 lists role-based access under industry-ready
+system thinking, and T-04's acceptance says a Rep attempting an approval is refused **by
+the server**, not by a hidden button. Build the check first and the button second.
 
-- **ADR-010** fixes the `Quotation.stage` enum: `DRAFT · PENDING_APPROVAL · REJECTED ·
-  APPROVED · SENT · UNDER_NEGOTIATION · CONFIRMED · FULFILLED · INVOICED · PAID`. `SENT` is
-  a real stage reachable **only** from `APPROVED`. There is no second portal-status field —
-  portal status is a display mapping over `stage`.
-- **ADR-005** fixes `ApprovalChainRule` as `score_min` / `score_max` / `requires_manager` /
-  `requires_finance`, with the bands as data.
-- **ADR-004** means `Quotation.portal_token` holds a signed `TimestampSigner` value and
-  there is no customer user table.
-- **The A5 split** (DECISIONS.md, second-pass consistency check) makes `SubscriptionPlan`
-  a **P0 entity** — AC-1 requires a subscription plan to be created and to persist.
-  `BillingScheduleEntry` stays out of P0 and arrives with T-20.
+`SESSION_COOKIE_HTTPONLY`, `SESSION_COOKIE_SAMESITE` and `CSRF_COOKIE_SAMESITE` are already
+set in `config/settings.py` from T-01.
 
 ### Scope
 
-User (exists), CustomerTier, Customer, Category, Product, PriceListEntry,
-CategoryDiscountCeiling, ApprovalChainRule, Quotation, QuotationLine, ApprovalStep,
-AuditLog, Warehouse, Stock, FulfilmentAllocation, Invoice, Payment, PortalMessage,
-**SubscriptionPlan**.
+- Login, logout and signup views in `core/`, using `django.contrib.auth` — do not
+  hand-roll authentication.
+- A role-checking decorator or mixin that views use, e.g. `@require_roles(Role.MANAGER,
+  Role.FINANCE)`, returning 403 rather than redirecting to login when the user is
+  authenticated but wrong-roled. Those are different failures and should not look alike.
+- Django forms for every input, since ARCHITECTURE.md makes forms the place where Odoo's
+  "validate user input robustly" must-have is satisfied.
+- Templates extending `core/templates/core/base.html`, matching the dark theme.
 
-Models are split by domain across `core/models/` — `catalogue.py`, `parties.py`,
-`sales.py`, `inventory.py`, `billing.py` — per ARCHITECTURE.md, to keep four developers off
-each other's diffs. Re-export everything from `core/models/__init__.py`.
-
-Money fields are `DecimalField`. No `FloatField` anywhere near a price, a percentage or a
-margin (ADR-002).
+Signup assigns a role. Decide and record whether self-signup may create a MANAGER or
+FINANCE account, or whether it only creates REPs — an unauthenticated visitor granting
+themselves approval rights would make the whole governance story hollow. There is no ADR
+for this; add one if the answer is not obvious.
 
 ### Acceptance criteria
 
-- [ ] Migration applies cleanly to an empty database (`rm db.sqlite3 && python manage.py migrate`).
-- [ ] Unique constraint on `Stock (product, warehouse)` enforced at database level, not
-      just in a form.
-- [ ] DATA_MODEL.md invariant 8 (`qty_reserved <= qty_on_hand`) expressed as a
-      `CheckConstraint`.
-- [ ] DATA_MODEL.md invariant 11 (Σ payments ≤ invoice amount) expressed where SQLite
-      allows; where it cannot be a constraint, it is enforced in the service and that is
-      stated in a comment rather than assumed.
-- [ ] DATA_MODEL.md invariant 9 (`RECURRING` line has a plan, `ONE_TIME` does not)
-      expressed as a `CheckConstraint`.
-- [ ] `Quotation.stage` uses exactly ADR-010's enum, as `TextChoices`.
-- [ ] Every model is importable from `core.models` and `python manage.py check` is clean.
-- [ ] `python manage.py test` still passes (the two ADR-005 spec tests still skip).
-- [ ] Schema announced to the team before the migration is pushed.
+- [ ] Signup and login work with hashed passwords; logout ends the session.
+- [ ] Session cookie is httpOnly and sameSite (already set — confirm, do not re-set).
+- [ ] Role is read from the User row and checked server-side on every protected action.
+- [ ] A Rep POSTing directly to an approval URL is refused **by the server**, with a 403,
+      and a test asserts it.
+- [ ] Invalid input is rejected with a visible message, not a stack trace or a silent
+      no-op.
+- [ ] The seeded accounts all log in.
+- [ ] `manage.py test` still passes.
 
 ### Out of scope
 
-Admin registration (T-05, T-06, T-07), the seed script (T-03), and every service module.
-Do not write `core/services/risk.py` here — T-09 owns it, and `core/tests/test_risk.py` is
-already waiting for it.
+The approval screen itself (T-13) and the workspace (T-11). This task builds the gate, not
+the rooms behind it. Do not register config models in admin here — that is T-05/T-06/T-07.
 
 ### Verification plan
 
-1. `rm db.sqlite3 && python manage.py migrate` from clean — no warnings, no interactive prompts.
-2. In `manage.py shell`, create one row of each entity and read it back.
-3. Deliberately violate each constraint above and confirm the database refuses it.
-4. `python manage.py test` — green, with the two risk tests still skipping.
+1. Log in as each of the four seeded roles.
+2. `curl -X POST` an approval endpoint as a Rep session and confirm a 403 — not a redirect,
+   not a 200.
+3. Submit each form empty and confirm a visible field error.
+4. Confirm logout actually clears the session by re-requesting a protected page.
 
 ### Then what
 
-T-03 (seed script) immediately after, and it is the highest-leverage task in the build:
-every other track needs data. The seeded stock — **Main Warehouse 4, East Depot 10, demo
-order of 6** — is what makes the warehouse split actually trigger on stage, and without it
-AC-5 cannot be demonstrated at all.
+T-05, T-06 and T-07 register the configuration models in Django admin. Those three
+together are what make **AC-1 demonstrable** — a discount tier, a warehouse and a
+subscription plan created through a screen and still there on reload. The rows exist and
+persist today, but nothing can edit them yet.
