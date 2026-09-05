@@ -6,12 +6,23 @@ Evaluator: Karan Israni (kais@odoo.com · GitHub `kais-odoo`, `hackathon-odoo`)
 
 > Read the current round's section aloud at each check-in. Add a new round section as the
 > hackathon progresses; do not rewrite earlier rounds — the history is the point.
+>
+> **This file is written to be spoken.** The "Likely questions and our answers" section
+> after Round 2 is standing reference for every round, not just one.
 
 ---
 
 ## Round 1 — Tech stack and approach
 
 *Logged 05 Sep 2026, ~11:45 IST*
+
+### Team
+
+**Team 317 is one person.** This is a solo build, which Odoo's registration rules allow.
+The tech stack table below was written when the plan still assumed four developers, so a
+few of its sentences say "four people" and "four laptops". Those are left exactly as
+written rather than quietly edited — the reasoning behind each choice did not change, only
+the number of people carrying it out.
 
 ### What we are building
 
@@ -43,9 +54,9 @@ score are all money maths, so this mattered enough to decide up front rather tha
 
 **Why not the alternatives.** We evaluated FastAPI and Next.js. FastAPI would have meant
 writing roughly sixty endpoints plus a separate React frontend, with entity definitions
-duplicated in Pydantic and TypeScript and nothing keeping them in sync — a real risk with
-four people editing in parallel. Next.js was rejected on team fluency rather than merit. We
-chose the stack that lets four developers write business logic instead of plumbing.
+duplicated in Pydantic and TypeScript and nothing keeping them in sync. Next.js was
+rejected on fluency rather than merit. We chose the stack that spends the available hours
+on business logic instead of plumbing — which matters more, not less, with one developer.
 
 ### Why this problem statement
 
@@ -65,12 +76,6 @@ Where the problem statement leaves something genuinely unspecified — the exact
 arithmetic, the split algorithm, the proration basis — we recorded it as an open decision
 in `docs/DECISIONS.md` rather than inventing an answer and hoping nobody asked.
 
-**Correction, added at Round 2:** this section originally described four members working
-four parallel tracks. The build is solo — one member, Team 317. The four tracks remain a
-useful description of how the work is *ordered*, but they are worked sequentially, and
-parallelism comes from delegating independent, non-overlapping work rather than from
-additional people.
-
 ### Status at this round
 
 Documentation system complete. Application implementation has not started.
@@ -78,75 +83,459 @@ Next task: **T-01 — project scaffold and database connection.**
 
 ---
 
-## Round 2 — Scaffold up, blocking decisions closed
+## Round 2 — Decisions closed, schema and seed live, services under contract
 
 *Logged 05 Sep 2026*
 
-**What landed since last round.**
+Five pieces of work landed since Round 1: **T-00** closed the blocking decisions, **T-01**
+stood up the application, **T-02 and T-03** built the whole schema and the seed in one
+migration wave, and a **contract pass** fixed the interfaces of the services layer before
+any of it was written. Every change is committed and pushed; `git log` is the record.
 
-The application now runs. Django 5.2 on SQLite, with a custom `User` model carrying the
-four roles — Rep, Manager, Finance, Admin — and a `/health/` page whose every value is read
-from the database on each request, so the round trip from URL to ORM to SQLite to template
-is proved rather than asserted. The Django admin is up and registers the user model with
-its role. We verified it the way it will actually be used: cloned the repository into a
-clean directory, followed only the README, and had the app serving from a fresh database.
+Nothing in this section is a plan. Every claim below is something that runs today and can
+be checked in the repository.
 
-Alongside that we closed the four architectural decisions that were blocking the critical
-path. These were the places where the problem statement genuinely does not specify an
-answer, and we had deliberately left them open rather than guessing early.
+---
 
-- **The blended discount risk score.** The score is the total number of discount percentage
-  points given away above ceiling across the quotation, where each line is measured against
-  the stricter of its customer tier's ceiling and its category's. One badly-over line flags
-  on its own; several slightly-over lines add up until they flag too. Both of the problem
-  statement's worked examples reproduce exactly — the 18% service line against a 10% ceiling
-  scores 8, and the 2 + 3 + 2 case scores 7.
-- **The warehouse split.** Fill each line from the cheapest warehouse first and spill into
-  the next, except that a warehouse able to cover the line alone ships it alone; the
-  remainder becomes a backorder. We call it a heuristic in the architecture decision record
-  and on the screen, because that is what it is.
-- **Customer portal access.** A signed, quotation-scoped token in the URL. One token, one
-  quotation, enforced server-side; anything else is a 403. No customer accounts and no
-  email, so there is no live dependency during the demo.
-- **The quotation stage machine.** One stage field, ten stages. What the customer sees in
-  the portal is a display mapping over that field rather than a second field that can drift
-  out of step with it.
+### T-00 — We closed the four decisions that were blocking everything
 
-**How we wrote the most important one.** The two worked examples from the problem statement
-were written as unit tests **before** the formula was chosen, and the tests say so in their
-own docstring: they are the specification, and the implementation is what has to change if
-they disagree. They sit in the repository now, skipping with an explicit reason that names
-the task that will make them pass.
+The problem statement describes what the system should *do* but, in four places, not how.
+We had deliberately left those open in Round 1 rather than guessing early. This round we
+closed them, and each one is written up in `docs/DECISIONS.md` with the decision, the
+reason, and the consequences — including the alternatives we rejected and why.
 
-**Two contradictions we found in our own documents and fixed rather than papered over.**
-Our demo script had the customer countering at a discount that, under the routing rules we
-had just written, would have required two approvers while the script showed only one — the
-walkthrough would have stalled on stage. And our data model diagram allowed a rep to send a
-quotation to a customer straight out of Draft, which would have let them route around the
-approval chain entirely. Both are corrected, and both corrections are written down with the
-reasoning, because a silently patched document teaches nobody anything.
+**ADR-005, the blended discount risk score.** This is the important one, because it is the
+number that decides who reviews a deal. Here it is in one sentence:
 
-**Currently building.** T-02, the full P0 schema, in one migration wave. Then T-03, the
-seed script — which is the highest-leverage task in the build, because every one of our four
-tracks needs data to work against.
+> **The risk score is the total number of discount percentage points given away above
+> ceiling across the whole quotation, where every line is measured against the stricter of
+> the customer's tier ceiling and its own category ceiling.**
 
-**Blocked on / open decisions.** Nothing on the critical path. Three decisions remain open
-by choice — the deal-health thresholds, the subscription proration basis, and the treatment
-of tax — and all three block only SHOULD-priority features. We will close them when their
-tasks come up rather than guessing now.
+That is the whole rule. If a line is inside its limit it contributes nothing. If it is over,
+it contributes however many points it is over by. Add those up and that is the score.
 
-**Risks.**
+We chose it because it is the shortest rule that does both things the problem statement
+asks for, and because a judge can check it by hand against the breakdown on our approval
+screen — the column adds up to the number at the top.
 
-- Solo build, so there is no second machine and no second reviewer. Everything is verified
-  by exercising it — deleting the database and rebuilding from migrations plus the seed
-  script — rather than by someone else trying it.
-- Tailwind and HTMX load from CDNs today. The venue network is a dependency we do not want
-  during a five-minute demo, so vendoring them locally is on the backlog ahead of the
-  rehearsal.
-- The risk score deliberately ignores line value — a percentage-point rule, because the
-  problem statement's examples are stated in percentage points with no prices at all. It is
-  the most likely question we will be asked about our core rule, and we would rather answer
-  it plainly than dress the formula up.
+**Both worked examples from PDF §10, with the arithmetic.**
+
+*Example one — the Gold customer.* Gold is allowed fifteen percent overall. Hardware is
+capped at fifteen, Services at ten.
+
+| Line | Category | Discount given | Ceiling that applies | Points over |
+|---|---|---|---|---|
+| Laptop Pro 14 | Hardware | 12% | `min(15, 15)` = 15 | 0 |
+| Onsite Setup Service | Services | 18% | `min(15, 10)` = **10** | **8** |
+| | | | **Score** | **8.00** |
+
+The laptop is fine. The service line is eight points over *its own* ceiling, and that one
+line flags the entire quotation — even though eighteen percent "sounds fine on paper" for a
+Gold customer who is allowed fifteen. That is exactly the point the PDF makes.
+
+*Example two — many small overages.* Three lines, none of them alarming on its own.
+
+| Line | Category | Discount given | Ceiling | Points over |
+|---|---|---|---|---|
+| Laptop Pro 14 | Hardware | 17% | 15 | 2 |
+| Onsite Setup Service | Services | 13% | 10 | 3 |
+| Care Plan 2yr | Subscriptions | 14% | 12 | 2 |
+| | | | **Score** | **7.00** |
+
+No single line looks bad. Together the rep has quietly given away seven points of margin,
+and the quotation is flagged. That is what "blended" means, and it is why the score is
+order-wide rather than a check on the worst line.
+
+**Where the routing thresholds live.** Not in code. They are three rows in an
+`ApprovalChainRule` table, which an admin can edit:
+
+| Score from | Score to | Manager | Finance |
+|---|---|---|---|
+| 0.00 | 0.00 | no | no |
+| 0.01 | 7.99 | **yes** | no |
+| 8.00 | 9999.99 | **yes** | **yes** |
+
+So example one, at 8.00, needs the Sales Manager and then Finance. Example two, at 7.00,
+stops at the Manager. The eight-point boundary is not arbitrary — it is the PDF's own
+example of a serious overage. Change a row in that table and routing changes on the next
+quotation with no code change at all.
+
+**The other three decisions, briefly.**
+
+*ADR-006, the warehouse split.* Fill each line from the cheapest warehouse first and spill
+into the next cheapest — except that if the cheapest warehouse can cover the whole line by
+itself, it ships alone. Anything left over becomes a backorder. We call it a heuristic in
+the decision record, on the screen, and here, because that is what it is.
+
+*ADR-004, portal access.* A signed token in the URL, one token per quotation, copied from
+the internal screen. No customer accounts, no passwords, no email. A tampered token gets a
+403, never the quotation.
+
+*ADR-010, the quotation stage machine.* One field with ten stages. What the customer sees
+in the portal is a display mapping over that field, not a second stored field that could
+drift out of step with the first.
+
+---
+
+### T-01 — The application runs, and the health page proves it
+
+Django 5.2 on SQLite, a custom user model carrying the four roles, and a `/health/` page.
+
+**Why a health page at all.** Because "it compiles" is not evidence. Every value on that
+page is read from the database on each request — the SQLite version from a real cursor, the
+applied migration count from Django's own migrations table, the number of users, the roles
+present. We tested it by creating a user through the ORM and watching the count go from one
+to two and a Finance badge appear, then deleting that user and watching it go back. If the
+database were missing or unmigrated the page would fail loudly rather than render something
+reassuring.
+
+**The one thing that had to be right first.** Django's user model must be swapped *before*
+the first migration runs. Changing it afterwards means deleting the database and every
+migration and starting over. So `AUTH_USER_MODEL` was set, the custom user written, and
+only then was `migrate` run for the first time.
+
+**The bug the clean-clone test caught.** We verified the setup instructions by actually
+doing them: cloned the repository into an empty directory, created a virtual environment,
+installed from `requirements.txt`, migrated, created a superuser, and started the server —
+following only what the README said. Doing that surfaced a real defect. The Django admin's
+add-user form referenced a field called `usable_password`, which exists on Django 5.1 and
+later's `AdminUserCreationForm` but *not* on the older `UserCreationForm` we had
+subclassed. The page returned a 500 with a `FieldError`.
+
+The reason this is worth telling you: `manage.py check` reported no issues. The system
+check does not build admin forms, so nothing caught it until a browser actually loaded
+`/admin/core/user/add/`. It is a small bug, but it is the kind that surfaces on stage
+rather than in a terminal, and the clean-clone test is what found it.
+
+---
+
+### T-02 and T-03 — The whole schema and the seed, in one migration wave
+
+**Twenty-two models in total, twenty-one of them added in this wave** — the custom user
+came with T-01. They are split across five files by domain — catalogue, parties, sales,
+inventory, billing — and one `makemigrations`, one `migrate`.
+
+**Why one wave.** Because a migration is the one thing that is expensive to get wrong. We
+built the entire data model at once, including three entities the specification marks as
+lower priority — product variants, product co-purchase pairs, and billing schedule entries.
+Three small tables now, against three more migration waves later when those features come
+up. Being solo makes that cheaper, not riskier: there is nobody else's migration to collide
+with.
+
+**Twelve invariants are enforced by the database itself, and we proved it by breaking
+each one.** These are not form validations that a direct database write could sidestep.
+For each, we deliberately attempted the illegal thing and confirmed SQLite refused it:
+
+| # | What we tried | What refused it |
+|---|---|---|
+| 1 | Two stock rows for the same product in the same warehouse | `unique_stock_per_product_warehouse` |
+| 2 | Reserving more stock than is on hand | `stock_reserved_not_over_on_hand` |
+| 3 | A recurring line with no subscription plan | `recurring_line_has_plan_one_time_does_not` |
+| 4 | A one-time line carrying a subscription plan | the same constraint, other direction |
+| 5 | A line discount above 100% | `quotation_line_discount_in_range` |
+| 6 | A line with a quantity of zero | `quotation_line_qty_positive` |
+| 7 | An approval band whose maximum is below its minimum | `chain_rule_band_ordered` |
+| 8 | A product with a negative cost | `product_cost_non_negative` |
+| 9 | A payment of zero | `payment_amount_positive` |
+| 10 | A product paired with itself | `product_pair_not_self` |
+| 11 | Two approval steps with the same sequence on one quotation | `unique_step_sequence_per_quotation` |
+| 12 | A duplicate quotation number | the unique constraint on `Quotation.number` |
+
+**One invariant we could not put in the database, and we say so rather than hide it.** The
+rule that payments never exceed an invoice's amount needs a subquery, which SQLite cannot
+express in a CHECK constraint. It is enforced in the billing service instead, which is the
+only place in the codebase permitted to record a payment or move an invoice's status. That
+is written on the model, in the service, and in the verification output — so its absence
+from the schema is a documented decision, not something we missed.
+
+**The seed.** `python manage.py seed_demo` rebuilds the exact demo state: eight users,
+three tiers, three categories, three category ceilings, three approval chain rules, three
+customers, ten products each with a cost, four variants, thirty price-list entries, six
+product pairs, three subscription plans, two warehouses, eight stock rows and five
+quotations. It is idempotent — we ran it three times and compared row counts.
+
+**How we verified the seed, and why the method matters.** The seed writes a risk score onto
+a quotation. Checking that score with the same code that wrote it proves nothing. So we
+wrote a separate verification script that **imports nothing from the seed command**. It
+reads the configuration rows out of the database — the tier ceiling, the category ceilings,
+the line discounts — and applies ADR-005's rule, written fresh, to them.
+
+It confirmed:
+
+- The seeded Acme quotation `Q-2026-0003` recomputes to **exactly 8.00**, and the score
+  stored on the row matches that recomputation.
+- 8.00 matches the `8.00 to 9999.99` chain rule, which requires Manager and then Finance —
+  and the two approval steps sitting on that quotation are exactly Manager then Finance,
+  both pending.
+- The three approval bands tile with no gap and no overlap.
+- The PDF's second example totals **7.00** against the seeded Gold ceilings and lands in the
+  Manager-only band. So both worked examples are exercised by real configuration rows, not
+  by test constants.
+
+**The stock numbers, and why they are what they are.** Laptop Pro 14: Main Warehouse holds
+**4**, East Depot holds **10**, and the demo order is **6**.
+
+Main Warehouse is the cheaper of the two — shipping weight 1.00 against East Depot's 1.40.
+Under our rule the cheapest warehouse would ship the whole line alone if it could, but Main
+only has 4 of the 6. So the split is forced:
+
+> **4 from Main Warehouse, 2 from East Depot. Two shipments. Estimated cost
+> `4 × 1.00 + 2 × 1.40 = 6.80`.**
+
+**The trade-off we want to state before you ask it.** East Depot alone has 10 units and
+could have shipped all 6 in a *single* shipment. That is one fewer shipment. But it costs
+`6 × 1.40 = 8.40` against our 6.80 — roughly 24 percent more. So we read the problem
+statement's "minimise number of shipments" as *weighted by shipping cost*, which is what
+the same sentence in section A4 also says. If you ask why not one shipment from East Depot,
+the answer is a number already on the screen: 8.40 against 6.80.
+
+We also rejected the strict alternative — fewest shipments first, cost only as a
+tie-breaker — in writing, for two reasons. It produces the more expensive plan, and with
+this stock it produces no split at all, which would make the acceptance criterion about
+splitting across two warehouses impossible to demonstrate.
+
+---
+
+### The contract pass — interfaces agreed before implementations
+
+Before writing a single service body, we wrote the whole services layer as signatures and
+docstrings with `NotImplementedError` bodies: **eight modules, thirty-nine functions,
+eleven data structures and exception types.** Then we committed that as the integration
+contract.
+
+**Why.** Pricing, risk, approval, fulfilment, billing, negotiation, upsell and health all
+call each other. Writing them one at a time and discovering at hour eighteen that two of
+them disagree about a shape is a predictable, expensive failure. Fixing the interfaces
+first makes that impossible.
+
+The contract pins down more than argument lists. Three examples:
+
+- The risk scorer is **pure** — plain dictionaries and decimals in, a result object out, no
+  database. That is what lets the specification tests run without fixtures.
+- The approval router **raises** when no chain rule matches a score, rather than falling
+  through to "no approval needed". Silently skipping governance is the exact failure this
+  product exists to prevent, so a misconfigured chain stops the submit.
+- Accepting a warehouse split **recomputes at the moment of commit** rather than trusting
+  what the screen was showing, because stock can move between the page load and the click.
+
+**Three functions are deliberately blocked rather than guessed.** Subscription proration is
+blocked on ADR-008. Discount anomaly detection and delivery slippage are blocked on
+ADR-007. Their docstrings name the decision that blocks them and why, so nobody implements
+a threshold the problem statement never gave.
+
+**One more thing about the tests.** The two specification tests for the risk score were
+written *before* the formula was chosen — that was deliberate, so the PDF's examples are
+the specification rather than a description of whatever we happened to build. They live in
+`core/tests/test_risk.py` and currently skip, with a reason that names the task that will
+make them pass. The moment the risk service is implemented and wrong, they go red.
+
+---
+
+### Status at this round
+
+**Working today:** the app runs; the database rebuilds from nothing in seconds with
+`migrate` and `seed_demo`; the full schema with its constraints; Django admin login; the
+health page; the seeded demo state with a quotation that scores exactly what the decision
+record predicts.
+
+**Not built yet:** every screen. The rep workspace, the quotation builder, the approval
+screen, the fulfilment screen and the customer portal are all still to come, as is every
+service body. We are being explicit about that rather than describing a plan as if it were
+a feature.
+
+**Next:** T-04, internal authentication and role-based access, then registering the
+configuration models in Django admin.
+
+---
+
+## Likely questions and our answers
+
+*Standing reference for any round. One paragraph each, written to be said out loud.*
+
+### Why does the risk score ignore how much a line is worth?
+
+Because the problem statement's own worked examples are stated purely in percentage points,
+with no quantities and no prices anywhere in them. A value-weighted score cannot reproduce
+them — the eight-point service line would be diluted to almost nothing sitting next to six
+laptops, and the example the PDF chose to complain about would stop flagging. We treated
+those examples as the specification and made the formula follow them. We know the
+limitation: a twenty percent discount on a five-euro item scores the same as one on a
+five-thousand-euro item. The live margin indicator is the separate signal that carries
+value, and value-weighting the risk score is the first item on our "what we would build
+next" list. It is recorded as a deliberate simplification in ADR-005, not discovered now.
+
+### Is anything hardcoded or faked for the demo?
+
+One thing, and we would rather tell you about it than have you find it. The seed script
+contains two helper functions, `_totals` and `_risk_score`, that duplicate arithmetic which
+properly belongs in the pricing and risk services. They exist because the seed has to store
+totals and a risk score onto quotations, and those two services are not written yet — and a
+quotation list where every card reads zero is not a demo. They are marked `PROVISIONAL` in
+capitals in the file, with a comment saying which task deletes each one and that if a
+service and a helper ever disagree, the service is right. Deleting them is a written
+acceptance criterion on T-08 and T-09 in the backlog, not a comment we hope to remember.
+Beyond that: nothing is hardcoded. The risk score, the approval routing thresholds, the
+category ceilings, the shipping weights and the stock levels are all database rows, and the
+verification we ran reads them out of the database rather than asserting constants.
+
+### Why SQLite and not PostgreSQL?
+
+We were told to use a local database, and SQLite is local in the strictest sense — one file
+inside the repository folder. Postgres is not installed on this machine and Docker is not
+available, so choosing it would have meant installing and configuring a database service
+during the build for no benefit at demo scale. It is Django's default backend, so it is the
+same ORM, the same models and the same migrations as any other database; nothing about the
+data model is compromised, and we avoid Postgres-only field types so the backend stays
+swappable. The one real consequence is that SQLite has no decimal type, which is why every
+money calculation happens in Python with `Decimal` inside the services layer and never
+through a database aggregate — a `SUM` over a decimal column can come back as a float and
+drift. That was decided up front rather than debugged later, and it is written in ADR-002.
+
+### Why Django rather than FastAPI or Next.js?
+
+Because Django ships the parts of this problem we would otherwise hand-write. The problem
+statement asks for a backend configuration area — products, price lists, discount tiers,
+category ceilings, approval chains, warehouses, stock. That is about seven CRUD screens,
+and Django's admin gives them to us driven straight from the models, with search, filters
+and validation. Its authentication gives us sessions and password hashing already correct.
+FastAPI would have meant roughly sixty hand-written endpoints plus a separate React
+frontend, with the entities defined twice — once in Pydantic, once in TypeScript — and
+nothing keeping the two in sync. Next.js we rejected on fluency rather than merit. The
+hours saved on plumbing go into the discount governance and the warehouse splitting, which
+is what the problem statement says it is actually testing. We use the admin for the
+configuration area only; the rep workspace, the approval screen, the fulfilment screen and
+the portal are all hand-built, because leaning on the admin for those would read as
+unfinished.
+
+### Why is the customer portal a separate app rather than a flag on the internal one?
+
+Because the problem statement requires it to be a genuinely separate, restricted view and
+not an internal screen with a different label, and a flag would be exactly the second
+thing. The portal is its own Django app with its own URL prefix, its own base template and
+its own access rule. Access is a signed token that resolves to exactly one quotation — so a
+customer seeing only their own quotation is enforced by the URL itself rather than by a
+permission check somebody could forget to write. Portal views are forbidden from sitting
+behind the login decorator and forbidden from reading the current user at all, because a
+customer has no account. A tampered or unknown token returns a 403, never the quotation and
+never a redirect to the internal login page. The app exists in the repository today with
+its URL file reserved and mounted; the views land in T-14, and it returns a 404 until then,
+which is honest rather than a stub pretending to work.
+
+### Why are three lower-priority entities already in the schema?
+
+Product variants, product co-purchase pairs and billing schedule entries are all marked
+SHOULD in our specification, and their features are not built yet. They are in the schema
+because a migration wave is the one thing that is genuinely expensive to redo, and adding
+three small tables now costs three tables — whereas adding them later costs three separate
+migration waves at exactly the point in the build when we can least afford them. The tables
+are empty of behaviour: no service reads them yet, and nothing in the application pretends
+they do anything. The seed does put rows in them, so that when the upsell panel and the
+subscription screen are built there is real data waiting rather than a fixture written that
+afternoon.
+
+### What is not built yet, and why that order?
+
+Every screen. The rep workspace, quotation builder, approval screen, fulfilment screen and
+customer portal are all still to come, and so is every service body — they are signatures
+and docstrings today. The order is dependency-driven, and it is in `tasks/BACKLOG.md` where
+you can check it. Authentication comes next because everything else sits behind a role
+check. Then the configuration screens, because until a discount ceiling can be edited
+through a screen, the first acceptance criterion in the test flow cannot be demonstrated at
+all. Then pricing, then the risk score, then approval routing — that chain is the critical
+path, because the automatic routing is the product's entire thesis and nothing else is
+worth showing without it. Fulfilment, billing and the portal follow. The deal health
+dashboard and reporting are last on purpose: they are the two things we would cut first if
+we run out of hours, and putting them last means running out of hours cuts them
+automatically rather than by panic.
+
+### Did you use AI?
+
+Yes. Claude Code was used as a pair programmer throughout — writing code, reviewing it, and
+working through the design. What that did not do is make the decisions. Every architectural
+choice in this project is written up in `docs/DECISIONS.md` as a numbered decision record
+with the context, the decision, the reasoning and the consequences, including the
+alternatives that were rejected and why. There are ten of them. Ask me about any one and I
+will explain it — why the risk score adds percentage points instead of weighting by value,
+why the warehouse rule prefers a cheaper two-shipment plan over a more expensive
+single-shipment one, why the portal uses a signed token instead of customer accounts, why
+three decisions are still deliberately open. The specification tests for the risk formula
+were written before the formula was chosen, precisely so that the examples in the problem
+statement drove the implementation rather than the other way round.
+
+---
+
+## Open decisions we deliberately have not made
+
+Three decision records in `docs/DECISIONS.md` are still marked open. That is on purpose,
+not an oversight. Each one is a place where the problem statement genuinely does not
+specify an answer, and each blocks only lower-priority work. Deciding them now would mean
+inventing a number and writing it into code before the task that needs it exists.
+
+**ADR-007 — deal health thresholds.** The problem statement says a stalled deal is one
+inactive for "a configured number of days" but gives no default, and defines a discount
+anomaly as one "well above a rep's historical average" without quantifying "well above" or
+saying over what window the average is computed. It also lists delivery promise slippage,
+and there is no promise-date field anywhere in the problem statement to measure against.
+Safe to defer because the deal health dashboard is a SHOULD, not a MUST, and it appears in
+none of the eight acceptance criteria. **Forced by T-21.** If it is still open when that
+task starts, we ship stalled-deal detection alone and label the rest incomplete, which is
+what our own task file already instructs.
+
+**ADR-008 — subscription proration basis.** Mid-cycle changes have to be prorated, but
+whether that is daily pro-rata, whole-period, or something else is not stated, and neither
+is how a cancellation refund is computed. Safe to defer because the acceptance criterion
+that involves subscriptions checks that a one-time product and a recurring subscription on
+one order bill *correctly and separately* — it does not exercise a mid-cycle change. So
+hybrid billing can be demonstrated without proration being settled. **Forced by T-20.**
+Until then the field on the subscription plan holds the literal value `UNDECIDED`, and the
+proration function raises with a message naming the decision record, so it cannot be
+accidentally called.
+
+**ADR-009 — tax, sales teams, and replenishment rules.** Three fields the problem statement
+names without defining. Tax is listed as a product field but no tax rules are given, so we
+store the percentage and it participates in no total and no margin — which is written on
+the model rather than left to be inferred. "Sales Team" appears as a reporting filter but
+no team entity is described anywhere else. Replenishment rules are named for warehouses
+without any statement of what a replenishment rule does. All three are peripheral to all
+eight acceptance criteria. **Forced by T-05 and T-23** when the product configuration and
+reporting screens are built.
+
+---
+
+## Known risks
+
+Four things we know are fragile or unfinished. Listing them here so they are said out loud
+rather than discovered.
+
+**The split rule must skip lines for products that are not stocked.** Services and
+subscriptions have no stock rows at all, which is correct — you do not warehouse a
+consulting engagement. But a naive implementation of the split would report the Onsite
+Setup Service line as a total backorder and the fulfilment screen would look broken during
+the demo. We found this while writing the seed, before writing the split. It is recorded as
+an acceptance criterion on T-16 rather than left to be discovered on stage.
+
+**A portal counter-offer must replace a line's discount, not stack on top of it.** In the
+demo's second flow, Beta Industries is a Silver customer with a ten percent ceiling and
+counters at fifteen percent. Replacing the line's discount makes that five points over,
+which routes to the Sales Manager only — and the demo script shows exactly one approver.
+Stacking fifteen percent on top of the line's existing eight percent as a second
+order-level discount would give roughly twenty-one points over, pull Finance into the
+chain, and leave the walkthrough waiting for an approval that never comes. Recorded as an
+acceptance criterion on T-15.
+
+**No configuration model is registered in Django admin yet, so the first acceptance
+criterion is not demonstrable today.** The discount tiers, warehouses and subscription
+plans all exist as rows and persist across restarts — that part is done and verified — but
+there is no screen to create or edit them through. Until T-05, T-06 and T-07 register them,
+we cannot show a tier being set up and still being there on reload. We would rather say
+that plainly than describe seeded rows as if they were a working configuration screen.
+
+**The provisional arithmetic in the seed can rot silently.** The two helper functions
+described above agree with the risk decision record today, and that agreement is verified.
+But if the formula in ADR-005 ever changes and only the service is updated, the seed will
+keep producing the old numbers and nothing will fail. That is precisely why deleting both
+is a written acceptance criterion on the two tasks rather than a comment — a comment gets
+skimmed, an unmet acceptance criterion blocks a task from being marked done.
 
 ---
 
