@@ -2,46 +2,48 @@
 
 **Status: NOT STARTED**
 
-Done — see `tasks/DONE.md` and `git log`: T-00, T-01, T-02+T-03, the services contract,
-T-05/T-06/T-07 (admin as the configuration area), T-08 (pricing), T-09 (risk), T-10
-(approval routing) and T-11/T-12/T-13 (the three internal screens).
+**Flow A works end to end.** Build a quotation, watch the per-line ceiling check and the
+margin update by HTMX swap, submit, get routed to Manager then Finance automatically,
+approve, split 4 + 2 across two warehouses at cost 6.80, invoice the one-time lines only,
+record a payment, reach PAID. 88 tests, all passing, none skipped.
 
-The workspace runs end to end: build a quotation, watch the margin and the per-line
-ceiling check update by HTMX swap, submit, and the system routes it to Manager then
-Finance on its own. 55 tests, all passing, none skipped.
+Remaining MUST-have work is the customer portal.
 
 ---
 
-## T-16 — Warehouse split and backorders
+## T-14 and T-15 — Customer portal access and the re-approval loop
 
-**Blocked by nothing.** ADR-006 is Accepted and `core/services/fulfilment.py` is a written
-contract with signatures and docstrings; this task fills in the bodies and builds the
-fulfilment screen.
+**Flow B, and the best moment in the demo.** ADR-004 is Accepted and
+ is a written contract with signatures and docstrings.
 
-### The two things that must not be got wrong
+### The rules that are not negotiable
 
-1. **Non-stocked lines are skipped, not backordered.** Services and Subscriptions have no
-   `Stock` rows at all — correctly, you do not warehouse an engagement. A naive
-   implementation reports the Onsite Setup Service line as a total backorder and the
-   fulfilment screen looks broken on stage. Those line ids belong in
-   `SplitSuggestion.skipped_line_ids`.
-2. **The seeded case must produce 4 + 2.** Laptop Pro 14, quantity 6, Main Warehouse 4 at
-   weight 1.00, East Depot 10 at 1.40. Main is cheapest but cannot cover the line, so the
-   single-shipment shortcut does not fire: 4 from Main, 2 from East, two shipments,
-   estimated cost 6.80. Not one shipment of 6 from East at 8.40 — ADR-006 explains why,
-   and the reasoning matters as much as the number.
+- A signed token grants access to **exactly one** quotation, enforced server-side
+  (invariant 12). Changing the token to reach another quotation returns **403**, never
+  that quotation and never a redirect to the internal login.
+- Portal views must **not** sit behind  and must **never** read
+  . A customer has no account. Audit rows for portal actions carry a null
+  actor and attribute through the quotation's customer.
+- Visually distinct from the internal workspace. PDF §7 requires a genuinely separate
+  restricted view, not an internal screen relabelled.
+- **A counter-discount replaces the targeted line's discount. It does not stack as a
+  second order-level discount.** Beta is Silver with a 10% ceiling; a 15% counter is 5
+  points over, which is the Manager-only band and matches DEMO B5. Stacking it on the
+  line's existing 8% gives roughly 21 points over, pulls in Finance, and strands the
+  demo script waiting for an approval it never shows.
 
 ### Acceptance
 
-- [ ] Split computed from **live** stock, never cached or seeded.
-- [ ] Shows warehouse, quantity from each, shipment count and estimated cost.
-- [ ] Accept Suggested Split and Manual Override both work; override is re-validated
-      through the same availability rule and refused by the service, not by hiding a control.
-- [ ] Shortfall becomes a backorder row; a non-stocked line does not.
-- [ ] Invariants 6, 7 and 8 hold.
-- [ ] `accept_split` recomputes at commit time rather than trusting the rendered suggestion.
+- [ ] Token-scoped access to one quotation; a tampered token returns 403.
+- [ ] Status shown as Sent / Under Negotiation / Confirmed — a display mapping over
+      , not a second stored field (ADR-010).
+- [ ] Line-level comments and change requests, append-only.
+- [ ] Counter-discount re-scores through ; if over threshold the quotation
+      **automatically** re-enters PENDING_APPROVAL with fresh steps (AC-7, invariant 13).
+- [ ] Confirm Quotation works and is reflected internally.
+- [ ] Portal link copyable from the internal quotation screen. No email is sent (ADR-004).
 
 ### Then what
 
-T-17 (invoice and payment) completes the cash path, then T-14/T-15 build the customer
-portal — which is the demo's best moment and the last MUST-have screen.
+T-18, the verification pass over all eight acceptance criteria. AC-1 through AC-6 and AC-8
+are already demonstrable; AC-7 is what the portal adds.

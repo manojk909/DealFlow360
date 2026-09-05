@@ -523,31 +523,174 @@ order-level discount would give roughly twenty-one points over, pull Finance int
 chain, and leave the walkthrough waiting for an approval that never comes. Recorded as an
 acceptance criterion on T-15.
 
-**No configuration model is registered in Django admin yet, so the first acceptance
-criterion is not demonstrable today.** The discount tiers, warehouses and subscription
-plans all exist as rows and persist across restarts — that part is done and verified — but
-there is no screen to create or edit them through. Until T-05, T-06 and T-07 register them,
-we cannot show a tier being set up and still being there on reload. We would rather say
-that plainly than describe seeded rows as if they were a working configuration screen.
+**~~No configuration model is registered in Django admin yet~~ — closed at Round 3.** All
+twenty-two models are now registered and grouped into sections, so AC-1 is demonstrable: a
+discount tier, a warehouse and a subscription plan can be created through a screen and are
+still there on reload. We proved the configuration is real rather than decorative by
+editing a ceiling *through the admin form* and watching a quotation's routing change with
+no code change — 8.00 to 3.00 to 0.00 and back.
 
-**The provisional arithmetic in the seed can rot silently.** The two helper functions
-described above agree with the risk decision record today, and that agreement is verified.
-But if the formula in ADR-005 ever changes and only the service is updated, the seed will
-keep producing the old numbers and nothing will fail. That is precisely why deleting both
-is a written acceptance criterion on the two tasks rather than a comment — a comment gets
-skimmed, an unmet acceptance criterion blocks a task from being marked done.
+**~~The provisional arithmetic in the seed can rot silently~~ — closed at Round 3.** Both
+helper functions have been deleted. The seed calls `pricing.recompute_quotation()` and
+`risk.score_for_quotation()`, so there is no second implementation left to drift. Verified
+by rebuilding the database from nothing and seeding three times: identical row counts, and
+the same 8.00.
 
 ---
 
-## Round 3 — *(to be filled in)*
+## Round 3 — Flow A works end to end: quotation to cash
 
-**What landed since last round:**
+*Logged 05 Sep 2026*
 
-**Currently building:**
+Since Round 2 the application stopped being a schema and became a product. **The first of
+our two demo flows now runs end to end in the browser**: a rep builds a quotation, the
+system routes it for approval on its own, two approvers act, stock splits across two
+warehouses, an invoice is raised and a payment closes it.
 
-**Blocked on / open decisions:**
+Six pieces of work landed: the pricing engine, the risk score, approval routing, the three
+internal screens, the warehouse split with its screen, and invoicing with its screen. The
+test suite went from 2 tests to **88, all passing, none skipped**.
 
-**Risks:**
+---
+
+### What we can now show, and what each part is for
+
+**Pricing.** Line total is quantity times unit price less the line discount; the
+order-level discount then applies to the *sum* of already-discounted lines. That ordering
+matters more than it looks: two units at a thousand, less ten percent then five percent, is
+1710.00 — where discounting the gross by fifteen percent would give 1700.00. A test asserts
+that difference on purpose, because it is the kind of thing that looks right either way
+until somebody checks. Every figure is a `Decimal` computed in Python; nothing sums money
+through the database.
+
+**The risk score.** The formula we described last round is now the code, and the two
+worked examples from the problem statement are unit tests that **run and pass** rather than
+skip. They were written before the formula was chosen, and neither expectation has been
+edited since — the same file, unchanged. The Gold example scores exactly 8.00, the
+several-small-overages example exactly 7.00.
+
+One correction worth telling you, because it changed our own understanding. We assumed that
+raising the Services category ceiling from ten to eighteen would take that quotation's
+score to zero. It does not — it takes it to 3.00, because the effective ceiling is the
+*stricter* of the tier ceiling and the category ceiling, and the Gold tier caps at fifteen.
+Loosening only the category ceiling cannot lift a line past the tier cap. The code was
+right and our expectation was wrong. There are now tests for both halves of that rule.
+
+**Approval routing.** This is the product's thesis, so it is worth being precise. The rep
+clicks *Submit*. They do not request approval and there is no button that would let them.
+The system recomputes the pricing, scores the quotation, reads the approval bands out of
+the database and generates the reviewer steps it needs. With the seeded configuration the
+worked example produces Manager and then Finance; a smaller overage produces Manager only;
+a clean quotation skips approval entirely and goes straight to approved.
+
+If a score matches no configured band, the submit **stops with an error** rather than
+falling through to "no approval needed". Silently skipping governance is the exact failure
+this product exists to prevent, so a misconfigured chain must be loud.
+
+Approve, reject and return-for-revision each require a reason, and each writes an audit row
+with the user, the reason and the timestamp. Reject is terminal and leaves the untouched
+Finance step in place so the trail shows how far the deal got. Return sends the quotation
+back to draft and clears the pending steps, because the next submit re-scores and the
+numbers will have changed. A quotation cannot reach approved while any step is still
+pending, and a rep calling the approval function is refused by the service itself, not by a
+hidden button.
+
+**The three internal screens.** The quotation list is cards in stage columns, following the
+mockup — a rep scans a pipeline, they do not read a spreadsheet. The builder has a product
+picker by category, quantity steppers and per-line discount inputs, and beside every line a
+**Discount / Limit / Status** column that shows `OK` or `OVER +8 pt` the moment a discount
+is typed, not at submit. Every edit swaps one region of the page, so the line totals, the
+order total, the live margin indicator and the ceiling check are produced together by the
+same two service calls and cannot drift apart. There is no full page reload anywhere in the
+builder.
+
+The approval screen shows the blended score with the **given / allowed / over-by breakdown
+that produced it** directly underneath, footed by the score itself, so an approver can add
+the column up by hand. That is deliberate: a score somebody cannot check is a score they
+will not trust.
+
+**The warehouse split.** Computed from live stock every time it is asked for — never cached
+and never seeded. On the demo order of six laptops it pulls **four from Main Warehouse and
+two from East Depot**: two shipments at an estimated cost of 6.80.
+
+We say on the screen, not just in a document, that this is a heuristic and not an optimiser,
+and that lines are solved independently so the shipment count across a multi-line order is
+not globally optimal. The screen also explains that shipments are minimised *weighted by
+shipping cost* — which is the answer to "why not one shipment from East Depot?" before
+anyone has to ask it. That plan is one fewer shipment but costs 8.40 against our 6.80.
+
+The screen also names the lines that are **not warehoused** — the setup service — and says
+they are skipped rather than backordered. You do not warehouse a consulting engagement, and
+a naive implementation would have reported that line as a total backorder and made the
+screen look broken. We found that while writing the seed, before writing the split, and
+wrote it into the task as an acceptance criterion.
+
+**Invoicing and payment.** One-time lines bill through an invoice. Recurring lines do not —
+they bill on a schedule instead, and the screen shows them in a separate table and says in
+plain words that they are deliberately excluded. On the demo order the invoice is 7740.60,
+with 456.00 of subscription value correctly left off it.
+
+Invoice status is **derived** from the sum of payments, never assigned. Half paid derives
+partial; paid in full derives paid and moves the order to paid. Paying more than the
+outstanding amount is refused and writes no payment row at all — refused rather than
+clamped, because capping an overpayment silently would make the status a lie. SQLite cannot
+express that rule as a database constraint, so the billing service is the only thing in the
+codebase permitted to write a payment or move an invoice status, and the admin registers
+payments read-only to match.
+
+---
+
+### How we verified it
+
+Not by loading a page and looking at it. We drove the whole flow through the real views as
+a browser would — every step an HTTP request, no service called directly — and asserted
+what came back:
+
+| Criterion | Result |
+|---|---|
+| AC-2 | The 18% service line shows `OVER +8 pt` as it is typed |
+| AC-3 | Submit routes to Manager then Finance by itself, score 8.00 |
+| AC-5 | Split lands 4 from Main and 2 from East, cost 6.80, two allocation rows, no backorder, and the service line is named as not warehoused |
+| AC-6 | Invoice is 7740.60 — the one-time lines only — with 456.00 of recurring excluded |
+| AC-8 | Overpayment refused with no payment row; half payment derives partial; the remainder derives paid and the order reaches paid |
+
+The audit trail that run produced, in order: submitted for approval, approved, approved,
+order confirmed, split accepted, invoice generated, and two payments recorded — each with a
+user, a reason and a timestamp.
+
+We also closed the one piece of scaffolding we told you about last round. The seed script
+carried provisional copies of the pricing and risk arithmetic, because it had to store
+numbers before either service existed. **Both are deleted.** The seed now calls the real
+services, so the seeded score of 8.00 comes from the same code path that scores a quotation
+at submit time and the demo data cannot drift away from the behaviour it demonstrates. That
+was a written acceptance criterion on those two tasks, not a comment we hoped to remember.
+
+**There is now no arithmetic anywhere outside the services layer.** No template computes a
+total, no view holds a business rule.
+
+---
+
+### Currently building
+
+The customer portal — T-14 and T-15. That is Flow B, and it is the moment we most want to
+show you: a customer counters a discount from a separate, restricted screen with no account
+at all, and the quotation re-enters approval on its own.
+
+### Blocked on / open decisions
+
+Nothing on the critical path. The same three decisions remain deliberately open —
+deal-health thresholds, the subscription proration basis, and the treatment of tax — and
+all three still block only SHOULD-priority features. The proration function raises an error
+naming the decision that blocks it, so it cannot be called by accident.
+
+### Risks
+
+- The portal is the last MUST-have screen and it is not built. Everything else in the
+  acceptance test flow now works.
+- Recurring billing *schedules* are not built either. We can show that subscription lines
+  are correctly kept off the invoice; we cannot yet show the schedule they bill on.
+- The split is per line, so on a multi-line order it can suggest more shipments than a
+  global optimiser would. Documented, tested, and named on the screen rather than hidden.
 
 ---
 
