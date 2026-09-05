@@ -42,6 +42,12 @@ urlpatterns = [
     path("workspace/fulfilment/<int:pk>/accept/", views.fulfilment_accept, name="fulfilment_accept"),
     path("workspace/fulfilment/<int:pk>/override/", views.fulfilment_override, name="fulfilment_override"),
 
+    # T-17 — invoicing and payment
+    path("workspace/invoices/", views.billing_list, name="billing_list"),
+    path("workspace/invoices/<int:pk>/", views.billing_detail, name="billing_detail"),
+    path("workspace/invoices/<int:pk>/generate/", views.billing_generate, name="billing_generate"),
+    path("workspace/invoices/<int:pk>/pay/", views.billing_pay, name="billing_pay"),
+
     # T-13 — approval
     path("workspace/approvals/", views.approval_list, name="approval_list"),
     path("workspace/approvals/<int:pk>/", views.approval_detail, name="approval_detail"),

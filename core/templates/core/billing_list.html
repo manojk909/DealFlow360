@@ -1,0 +1,55 @@
+{% extends "core/workspace_base.html" %}
+{% block title %}Invoices &middot; DealFlow360{% endblock %}
+
+{% block content %}
+<h1 class="text-xl font-semibold text-slate-100">Invoices</h1>
+<p class="mt-1 text-sm text-slate-400">
+  One-time lines bill here. Recurring lines bill on a schedule instead &mdash; that
+  separation is deliberate, and the schedule screen is T-20.
+</p>
+
+{% if awaiting %}
+  <h2 class="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-500">Fulfilled, not yet invoiced</h2>
+  <div class="mt-2 flex flex-wrap gap-2">
+    {% for q in awaiting %}
+      <a href="{% url 'core:billing_detail' q.pk %}"
+         class="rounded-lg border border-amber-800 bg-slate-900 px-3 py-2 text-sm no-underline hover:border-amber-500">
+        <span class="text-slate-200">{{ q.customer.name }}</span>
+        <span class="ml-2 text-xs text-slate-500">{{ q.number }}</span>
+      </a>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<div class="mt-6 overflow-x-auto rounded-lg border border-slate-800">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-900 text-left text-[0.68rem] uppercase tracking-wide text-slate-400">
+      <tr><th class="px-3 py-2">Invoice</th><th class="px-3 py-2">Customer</th>
+          <th class="px-3 py-2 text-right">Amount</th><th class="px-3 py-2 text-right">Paid</th>
+          <th class="px-3 py-2 text-right">Outstanding</th><th class="px-3 py-2">Status</th>
+          <th class="px-3 py-2">Due</th></tr>
+    </thead>
+    <tbody class="divide-y divide-slate-800 bg-slate-950/40">
+      {% for row in rows %}
+        <tr class="cursor-pointer hover:bg-slate-900"
+            onclick="window.location='{% url 'core:billing_detail' row.invoice.quotation.pk %}'">
+          <td class="px-3 py-2 text-sky-300">{{ row.invoice.number }}</td>
+          <td class="px-3 py-2 text-slate-200">{{ row.invoice.quotation.customer.name }}</td>
+          <td class="px-3 py-2 text-right tabular-nums text-slate-100">&euro;{{ row.invoice.amount|floatformat:2 }}</td>
+          <td class="px-3 py-2 text-right tabular-nums text-emerald-400">&euro;{{ row.paid|floatformat:2 }}</td>
+          <td class="px-3 py-2 text-right tabular-nums text-amber-400">&euro;{{ row.outstanding|floatformat:2 }}</td>
+          <td class="px-3 py-2">
+            <span class="rounded px-1.5 py-0.5 text-xs font-medium
+              {% if row.invoice.status == 'PAID' %}bg-emerald-900 text-emerald-200
+              {% elif row.invoice.status == 'PARTIAL' %}bg-amber-900 text-amber-200
+              {% else %}bg-slate-700 text-slate-200{% endif %}">{{ row.invoice.get_status_display }}</span>
+          </td>
+          <td class="px-3 py-2 text-slate-400">{{ row.invoice.due_date|date:"d M Y" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="px-3 py-8 text-center text-slate-600">No invoices raised yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -115,8 +115,10 @@
   </div>
 
   {% if quotation.stage == 'FULFILLED' %}
-    {# Replaced by a link to the invoice screen in T-17. #}
-    <p class="mt-4 text-xs text-slate-500">Stock is reserved. Invoicing is T-17, next.</p>
+    <a href="{% url 'core:billing_detail' quotation.pk %}"
+       class="mt-4 inline-block rounded bg-sky-600 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-sky-500">
+      Stock reserved &mdash; go to invoicing &rarr;
+    </a>
   {% endif %}
 {% endif %}
 

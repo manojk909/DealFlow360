@@ -29,6 +29,12 @@
       Fulfilment
     </a>
 
+    <a href="{% url 'core:billing_list' %}"
+       class="border-b-2 px-3 py-2.5 text-sm font-medium no-underline
+              {% if active == 'invoices' %}border-white text-white{% else %}border-transparent text-sky-100 hover:text-white{% endif %}">
+      Invoices
+    </a>
+
     {# Named in the mockup, not built yet. Shown greyed rather than hidden: an absent
        feature honestly labelled costs less than one quietly missing. #}
     {% for label, task in unbuilt %}

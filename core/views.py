@@ -24,6 +24,7 @@ from urllib.parse import quote
 from core.models import (
     ApprovalStep,
     Category,
+    Invoice,
     Product,
     Quotation,
     QuotationLine,
@@ -31,7 +32,7 @@ from core.models import (
     Stock,
     User,
 )
-from core.services import approval, fulfilment, pricing, risk
+from core.services import approval, billing, fulfilment, pricing, risk
 
 
 # --------------------------------------------------------------------- health
@@ -103,7 +104,6 @@ def require_roles(*roles):
 # than one quietly missing (CLAUDE.md hackathon integrity).
 UNBUILT_TABS = [
     ("Subscriptions", "T-20"),
-    ("Invoices", "T-17"),
     ("Deal Health", "T-21"),
     ("Reports", "T-23"),
 ]
@@ -552,3 +552,114 @@ def fulfilment_override(request, pk):
     return redirect(
         f"/workspace/fulfilment/{pk}/?message={quote('Manual override applied.')}"
     )
+
+
+# --------------------------------------------------------------------- T-17 invoicing
+
+
+@login_required
+def billing_list(request):
+    """Every invoice raised, with what has actually been paid against it."""
+    invoices = (
+        Invoice.objects.select_related("quotation", "quotation__customer")
+        .prefetch_related("payments")
+        .order_by("-issue_date", "-id")
+    )
+    rows = [
+        {
+            "invoice": invoice,
+            "paid": billing._amount_paid(invoice),
+            "outstanding": invoice.amount - billing._amount_paid(invoice),
+        }
+        for invoice in invoices
+    ]
+    awaiting = Quotation.objects.filter(stage=Quotation.Stage.FULFILLED).select_related(
+        "customer"
+    )
+    return render(
+        request,
+        "core/billing_list.html",
+        {"rows": rows, "awaiting": awaiting, "active": "invoices", "unbuilt": UNBUILT_TABS},
+    )
+
+
+def _billing_context(quotation, error=None):
+    invoice = quotation.invoices.first()
+    one_time = quotation.lines.filter(line_type=QuotationLine.LineType.ONE_TIME)
+    recurring = quotation.lines.exclude(line_type=QuotationLine.LineType.ONE_TIME)
+
+    context = {
+        "quotation": quotation,
+        "invoice": invoice,
+        "one_time_lines": one_time.select_related("product"),
+        "recurring_lines": recurring.select_related("product", "subscription_plan"),
+        "can_generate": invoice is None
+        and quotation.stage
+        in {Quotation.Stage.CONFIRMED, Quotation.Stage.FULFILLED}
+        and one_time.exists(),
+        "error": error,
+        "active": "invoices",
+        "unbuilt": UNBUILT_TABS,
+    }
+    if invoice is not None:
+        paid = billing._amount_paid(invoice)
+        context.update(
+            {
+                "paid": paid,
+                "outstanding": invoice.amount - paid,
+                "derived_status": billing.derive_invoice_status(invoice),
+                "payments": invoice.payments.order_by("paid_at"),
+            }
+        )
+    return context
+
+
+@login_required
+def billing_detail(request, pk):
+    """FR-20. Generate the invoice, record a payment, watch the status derive itself."""
+    quotation = get_object_or_404(
+        Quotation.objects.select_related("customer", "rep"), pk=pk
+    )
+    return render(
+        request,
+        "core/billing_detail.html",
+        _billing_context(quotation, error=request.GET.get("error")),
+    )
+
+
+@require_POST
+@login_required
+def billing_generate(request, pk):
+    quotation = get_object_or_404(Quotation, pk=pk)
+    try:
+        invoice = billing.generate_invoice(quotation)
+    except ValueError as exc:
+        return redirect(f"/workspace/invoices/{pk}/?error={quote(str(exc))}")
+    if invoice is None:
+        return redirect(
+            f"/workspace/invoices/{pk}/?error="
+            + quote(
+                "This order has no one-time lines, so there is no invoice to raise. "
+                "Recurring lines bill on a schedule (T-20)."
+            )
+        )
+    return redirect("core:billing_detail", pk=pk)
+
+
+@require_POST
+@login_required
+def billing_pay(request, pk):
+    """Record a payment. Status is derived by the service, never posted from this form."""
+    quotation = get_object_or_404(Quotation, pk=pk)
+    invoice = quotation.invoices.first()
+    if invoice is None:
+        return redirect(f"/workspace/invoices/{pk}/?error={quote('No invoice yet.')}")
+
+    try:
+        amount = _decimal(request.POST.get("amount", ""), "Amount", minimum=Decimal("0.01"))
+        billing.record_payment(
+            invoice, amount, method=request.POST.get("method", "BANK_TRANSFER")
+        )
+    except (ValueError, billing.OverpaymentError) as exc:
+        return redirect(f"/workspace/invoices/{pk}/?error={quote(str(exc))}")
+    return redirect("core:billing_detail", pk=pk)
