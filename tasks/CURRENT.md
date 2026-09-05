@@ -1,53 +1,58 @@
 # CURRENT TASK
 
-**Status: NOT STARTED**
+**Status: NONE IN PROGRESS.**
 
-**Both demo flows now run end to end.** Every MUST-have screen exists.
+Everything in the P0 and P1 backlogs is shipped and green. **257 tests pass.** The three
+ADRs that were blocking P1 — ADR-007 (deal health thresholds), ADR-008 (proration basis),
+ADR-009 (tax / sales team / replenishment) — are closed and recorded in `docs/DECISIONS.md`.
 
-Flow A: build a quotation, watch the ceiling check and margin update by HTMX swap, accept
-an upsell suggestion, submit, route to Manager then Finance automatically, approve, split
-4 + 2 across two warehouses at cost 6.80, invoice the one-time lines only, record a
-payment, reach PAID.
+## What remains
 
-Flow B: open the portal on a signed token, comment on a line, counter at 15 percent, watch
-the quotation re-enter approval on its own with a Manager step and no Finance step, approve
-internally, confirm in the portal.
+**T-35 — rehearse and record the five-minute demo.** The last required deliverable. Two
+flows end to end, per `docs/DEMO.md`. Record it while things work, not at 09:45.
 
-Seven of the eight acceptance criteria are demonstrable today. **139 tests, all passing.**
+## Before the recording, in this order
 
----
+1. `python manage.py migrate` — ADR-007/009 added `SalesSetting` plus three fields.
+2. `python manage.py seed_demo` — the dataset grew: 10 users across two sales teams,
+   8 customers, 18 products, 3 warehouses, ~25 quotations including the history that makes
+   Deal Health show real alerts.
+3. `python manage.py test` — expect 257 passing.
+4. Walk the eight PDF §9 steps once by hand.
 
-## T-18 — Verification pass against the eight acceptance criteria
+## Recently closed
 
-**This is the gate.** BACKLOG says P1 does not start until it passes, and any failure
-becomes a task rather than a note.
+| Task | What shipped |
+|---|---|
+| T-20 | Billing schedules, daily pro-rata proration, cancel with credit note (B7) |
+| T-21 | Deal health: stalled, anomalies, slippage, all thresholds configured (B9) |
+| T-22 | Pipeline Kanban split from the Quotations table (B1/B2) |
+| T-23 | Reporting with the four PDF filters, CSV export, print-to-PDF (A7) |
+| T-24 | Consolidate remaining backorder (B6) |
+| T-25 | Product variant picker on the quotation line (A2) |
+| T-29 | Nudge / escalate from a deal health alert |
+| T-30 | Subscription cancel with credit note |
+| T-31 | Replenishment as a reorder point per stock row (A4) |
+| T-36 | Sidebar navigation, KPI tiles, light mode, and three bug fixes below |
+| T-37 | Profile screen with four tabs, role-correct navigation, rebuilt pipeline board |
 
-AC-2, AC-3, AC-4, AC-5, AC-6, AC-7 and AC-8 have each been driven through the real views
-and asserted. What remains is to run all eight in one sitting, by hand, against a freshly
-seeded database, and record the result.
+> **Re-seed before recording.** Clicking around the live app leaves real rows behind —
+> Q-2026-0001 currently holds a monitor at 54%, which the anomaly detector correctly
+> flags. `seed_demo` restores it to the empty draft `docs/DEMO.md` step A2 expects.
 
-### The one that is not yet proven
+## The bugs found by clicking through the running app
 
-**AC-1** — sign up or log in, then set up a discount tier, a warehouse and a subscription
-plan, and confirm all three persist and are visible on reload. The rows exist and the
-admin screens exist, but nobody has performed that criterion as written from a clean
-database. Do it and record it.
+1. **Sign-out was a GET.** Django 5's `LogoutView` refuses GET, so the control returned a
+   405 page and left the session signed in — and the demo needs three role switches.
+2. **Locked quotations were editable over HTTP.** The builder page hid the product picker
+   past DRAFT, but the five HTMX mutation endpoints never checked the stage.
+3. **Rejected input was silent.** HTMX discards the body of a non-2xx by default, so the
+   view's error partial was rendered and thrown away.
 
-Note the wording is *sign up* or log in. There is a login page but **no signup page** —
-FR-01 asks for one. Decide whether to build it or to record its absence honestly; if it is
-built, decide and write down whether self-signup may create a MANAGER or FINANCE account,
-because an unauthenticated visitor granting themselves approval rights would make the whole
-governance story hollow.
+4. **Role-correct navigation.** Approvals, Deal Health and Reports were offered to Reps
+   and then refused; a Rep opening the approval screen for their own quote got a 403,
+   despite "tracks approval status" being their job in PDF section 3.
+5. **The light-mode toggle deleted its own icon**, and every gradient tile stayed dark
+   because Tailwind writes `--tw-gradient-stops` as well as `--tw-gradient-from`.
 
-### Acceptance
-
-- [ ] All eight criteria run by hand against a clean `migrate` + `seed_demo`, results recorded.
-- [ ] Any failure becomes a numbered task, not a note.
-- [ ] `docs/EVALUATOR_UPDATES.md` Round 4 written from the result.
-
-### Then what
-
-P1, in the order the backlog already sets: T-20 hybrid billing schedules (ADR-008 must be
-closed first), T-21 deal health (ADR-007), T-22 pipeline Kanban, T-23 reporting. Then the
-three PDF section 8 deliverables: the architecture diagram, the what-we-would-build-next
-note, and the rehearsed recording.
+Covered by `core/tests/test_stage_lock.py` and `core/tests/test_end_to_end_roles.py`.

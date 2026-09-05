@@ -2,7 +2,7 @@
 
 Structured form of `../Problem statements/DealFlow360.pdf`. The PDF is the source of truth;
 this file restates it so requirements can become tasks. Anything the PDF does not state is
-marked **DECISION NEEDED** rather than filled in.
+marked **DECIDED — see DECISIONS.md** rather than filled in.
 
 ---
 
@@ -172,7 +172,7 @@ minimum margin threshold surface. Adding one updates the margin indicator immedi
 ### BR-8 — Deal health
 - Stalled = quotation inactive for more than a **configured** number of days.
 - Discount anomaly = a discount well above a rep's **historical average**.
-- **DECISION NEEDED — anomaly threshold definition.** "Well above" is not quantified in
+- **DECIDED — see DECISIONS.md — anomaly threshold definition.** "Well above" is not quantified in
   the PDF. See ADR-007.
 
 ## 7. Functional requirements
@@ -295,7 +295,7 @@ Evaluator `kais-odoo` / `hackathon-odoo` added as GitHub collaborator.
 
 ## 12. Open ambiguities
 
-Tracked as DECISION NEEDED entries in `DECISIONS.md`. Still open:
+Tracked as DECIDED — see DECISIONS.md entries in `DECISIONS.md`. Still open:
 
 - Discount anomaly threshold; "well above historical average" is unquantified (ADR-007).
 - Stalled-deal day count — PDF says "configured", default not given (ADR-007).

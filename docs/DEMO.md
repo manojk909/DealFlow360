@@ -57,6 +57,24 @@ Open this in a **second browser profile** so the two UIs are visibly different p
 | B5 | Manager approves | Stage → Approved. No Finance step, because 5 points is inside the Manager-only band — the chain rules decide, and Flow A already showed the two-step chain. |
 | B6 | Back in the portal, click **Confirm Quotation** | Status → Confirmed, order moves to fulfilment. |
 
+### Flow C — the analytics half, if there is time (~45 s)
+
+Optional, and worth it only if A and B ran clean. It is what turns "a quotation tool" into
+"a sales operations platform" in a judge's head.
+
+| # | Action | Expected system behaviour |
+|---|---|---|
+| C1 | Open **Deal Health** | Three populated panels: stalled deals, discount anomalies, delivery slippage. Say the thresholds are database rows, not constants. |
+| C2 | Point at the anomaly row | Sara Iqbal's 34% line against her own 2–4% average. *"Measured against her own history, which is what the problem statement asks for — not a company-wide number."* |
+| C3 | Open the back-end, set **stall days** to 1, reload Deal Health | More rows appear. This is the proof that "configured" is real. |
+| C4 | Open **Reports**, filter by team East, then export CSV | The file matches the screen because both read one queryset. |
+| C5 | Open **Subscriptions** → Q-2026-0140 | One-time and recurring lines separated, the billing schedule below, and a Prorate control that writes a daily pro-rata adjustment row. |
+
+If you are short of time, cut C3 to C5 and keep C1 and C2 — the anomaly explanation is the
+line that lands.
+
+---
+
 > **Why 15% and not 20%.** This step said 20% until ADR-005 fixed the routing bands. At 20%
 > a Silver customer is 10 points over, which crosses the 8.00 threshold and pulls in Finance
 > as well as the Manager — so B5's "Manager approves" would have left the quotation sitting in

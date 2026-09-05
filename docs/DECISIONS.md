@@ -346,7 +346,7 @@ undemonstrable. Recorded here so the choice is visible rather than assumed.
 
 ## ADR-007 — Deal health thresholds
 
-**Status:** Decision Needed
+**Status:** Accepted
 **Date:** 2026-09-05
 
 **Context.** PDF B9 defines stalled deals as "quotations inactive for more than a
@@ -354,21 +354,45 @@ configured number of days" — configurable, but no default given. Discount anom
 "a discount well above a rep's historical average" — "well above" is not quantified. Also
 listed: delivery promise slippage indicators, with no definition of the promise date.
 
-**Open.** The default stall window; the anomaly threshold and how a rep's historical
-average is computed (over what window, which quotations count); what a delivery promise is
-in the data model, since no promise-date field appears anywhere in the PDF.
+**Decision.** **All three thresholds live on a `SalesSetting` singleton row, not in code.**
 
-**Note.** Deal health is SHOULD, not MUST. If this is still undecided when the P1 work
-starts, the dashboard can ship with stalled-deal detection only and the anomaly panel
-marked incomplete — honestly labelled, per the integrity rule.
+| Threshold | Default | Meaning |
+|---|---|---|
+| `stall_days` | 7 | An open quotation untouched for longer is stalled. |
+| `anomaly_window_days` | 90 | How far back a rep's own average discount is computed. |
+| `anomaly_threshold_pct` | 10 | Points above that average which count as an anomaly. |
+| `delivery_promise_days` | 5 | Days after confirmation an order is promised for. |
 
-**Blocks:** T-21 (deal health and anomaly dashboard).
+1. **Stalled** — `last_activity_at` older than `stall_days`, and the stage is still open.
+   PAID and REJECTED are finished, so they are never stalled however long they sit.
+2. **Anomaly** — a line whose discount is at least `anomaly_threshold_pct` points above
+   **that rep's own mean discount** over the window. The PDF says "a rep's historical
+   average", so the comparison is per rep, not company-wide. A rep with no history has no
+   average, so their lines cannot be anomalies — the alternative flags every line a new
+   joiner writes, which is noise, not signal.
+3. **Slippage** — `Quotation.promised_delivery_date`, set at confirmation to
+   today + `delivery_promise_days`, is now the promise the PDF refers to. An order past it
+   with stock still on backorder has slipped. Orders confirmed before the field existed
+   have no promise and are skipped rather than back-dated into a guess.
+
+**Reason.** The PDF's own word is *configured*. A constant in `health.py` would not be
+that, and the difference is demonstrable: a judge can open the back-end, set the stall
+window to 1, and watch the dashboard change. Putting the anomaly comparison on the rep's
+own record follows the wording exactly and avoids the trap of flagging a whole team
+because one product line runs at a structurally higher discount.
+
+**Consequences.** One extra table and one migration. `health.py` reads the row on every
+call rather than caching it, which is correct for a dashboard and irrelevant at this size.
+The three detectors are covered by `core/tests/test_subscriptions_and_health.py`, including
+a test that moving the setting moves the result — the property that makes it configuration.
+
+**Unblocks:** T-21 (deal health and anomaly dashboard), T-29 (nudge action).
 
 ---
 
 ## ADR-008 — Subscription proration method
 
-**Status:** Decision Needed
+**Status:** Accepted
 **Date:** 2026-09-05
 
 **Context.** PDF A5 requires "proration rules for mid cycle quantity or plan changes" and
@@ -376,39 +400,70 @@ B7 requires handling "mid cycle proration when quantity changes". The basis — 
 pro-rata, whole-period, or something else — is not specified. Cancellation triggers "an
 automatic partial refund or credit note" with no rule for computing the amount.
 
-**Open.** Proration basis; whether a partial refund and a credit note are alternatives or
-the same thing expressed differently; whether unused time is refunded or credited forward.
+**Decision.** **Daily pro-rata on the current period, for both quantity changes and
+cancellation.**
 
-**Note.** SPEC.md scopes proration to quantity changes (SHOULD); plan changes and credit
-notes are BONUS. A defensible, documented simple rule beats an elaborate one that is not
-finished.
+```
+adjustment = (new_qty - old_qty) x unit period price x days_remaining / days_in_period
+```
 
-**Blocks:** T-20 (subscription lines and hybrid billing).
+* Every period after the current one bills at the new quantity in full.
+* A decrease produces a negative adjustment — a credit, carried on the schedule.
+* **Cancellation** credits the unused days of the current period as a credit-note
+  `Invoice` (`is_credit_note=True`), and cancels every future scheduled entry. A partial
+  refund and a credit note are therefore the same thing here, expressed once: the money
+  goes back as a document against the order, not as an outbound payment, because nothing
+  in this system moves money outwards.
+
+**Reason.** It is the rule a customer can check on a calendar, which is the property that
+matters for a billing rule anyone has to trust. Whole-period billing overcharges a customer
+who upgrades on the last day of a month; not prorating at all gives away most of a period
+on every upgrade. Month lengths are handled by `calendar.monthrange`, so 31 January plus
+one month is 28 February rather than a crash.
+
+**Consequences.** `SubscriptionPlan.proration_method` now carries `DAILY` and
+`cancellation_policy` carries `CREDIT_UNUSED_DAYS` instead of `UNDECIDED`. Plan *changes*
+(as opposed to quantity changes) remain out of scope — SPEC.md scopes proration to
+quantity, and a plan change is a different question about what happens to the remaining
+schedule. Recorded in NEXT.md rather than half-built.
+
+**Unblocks:** T-20 (subscription lines and hybrid billing), T-30 (cancel with credit note).
 
 ---
 
 ## ADR-009 — Fields named by the PDF but left undefined
 
-**Status:** Decision Needed
+**Status:** Accepted
 **Date:** 2026-09-05
 
 **Context.** Three items appear in the problem statement without enough definition to
-implement:
+implement: Tax (A2), Sales Team (A7), and replenishment rules (A4).
 
-1. **Tax.** PDF A2 lists Tax as a product field. No tax rules, rates or treatment are
-   given. Open: whether totals are tax-inclusive or exclusive, and whether tax enters the
-   margin calculation. Currently `tax_pct` exists on Product but participates in nothing.
-2. **Sales Team.** PDF A7 lists "Sales Team / Rep" as a reporting filter, but no team
-   entity, membership or hierarchy is described anywhere else. Open: whether to model a
-   Team entity or filter by rep only.
-3. **Replenishment rules.** PDF A4 says "Configure stock levels and replenishment rules per
-   warehouse" without defining what a replenishment rule does. Open: whether this is a
-   reorder point, an auto-restock action, or display-only.
+**Decision.** The smallest thing that satisfies the words in the PDF, for each.
 
-**Note.** All three are peripheral to the eight acceptance criteria. The lazy correct
-answer for each is probably the smallest thing that satisfies the words in the PDF.
+1. **Tax — carried, displayed, excluded from margin.** `Product.tax_pct` is seeded and
+   shown on the product record. Totals are **tax-exclusive** and margin is computed
+   pre-tax, because margin is a cost-versus-price question and tax is neither. No tax
+   rules engine, no jurisdictions: the PDF names a field, not a behaviour, and inventing
+   the behaviour would put a number on screen that nobody specified.
+2. **Sales Team — a label on the user, not an entity.** `User.team` is a plain field, and
+   the report filter groups by it. The PDF asks for "Sales Team / Rep" as a *filter* and
+   describes no team entity, membership, hierarchy or manager-of relationship anywhere
+   else. A `Team` table with one column would be ceremony around a string.
+3. **Replenishment — a reorder point, display only.** `Stock.reorder_point` per row; the
+   fulfilment stock table flags any row at or below it as needing restock. Nothing
+   auto-orders, because auto-ordering needs a supplier, a lead time and a purchase order,
+   none of which the PDF mentions.
 
-**Blocks:** T-05 (product, category and price list configuration), T-23 (reporting with filters).
+**Reason.** Each of these is one line in the problem statement and peripheral to all eight
+acceptance criteria. The failure mode to avoid is building a plausible-looking subsystem
+around a word — a tax engine, an org chart — and having a judge ask which requirement it
+came from.
+
+**Consequences.** Reporting can filter by team (see A7) and the stock table answers "what
+needs restocking". Multi-currency stays a bonus and stays unbuilt (PDF §7 marks it so).
+
+**Unblocks:** T-05, T-23 (reporting with filters), T-31 (replenishment rules).
 
 ---
 
@@ -699,3 +754,100 @@ was chosen, in `core/tests/test_risk.py`, per CLAUDE.md. They skip cleanly until
    over-ceiling quotation cannot reach a customer before governance has seen it. The
    diagram should be corrected. DATA_MODEL.md is owned by a task in flight and was not
    edited here.
+
+---
+
+## ADR-013 — Assets: what a customer owns
+
+**Status:** Accepted
+**Date:** 2026-09-06
+
+**Context.** A competitor review of Salesforce Revenue Cloud and Odoo Subscriptions found
+one structural difference that explains most of the feature gap. Both are built around an
+**asset** — a record of what a customer owns *right now* — and their entire right-hand side
+(renewals, amendments, cancellations, MRR, churn, retention) reads from it. This system
+went Quotation → Invoice and stopped, so it could say "Acme signed a quote in March" and
+could not say "Acme owns three Care Plans worth ₹1,440 a month, expiring 14 October".
+
+That second sentence is where a renewals conversation starts, and no amount of querying
+quotations produces it: a quotation records what was agreed on a day, an asset records what
+is true today. Two quotations for the same customer may overlap, supersede each other, or
+have been cancelled, and the quotation table cannot tell you which.
+
+**Decision.** **One `Asset` row per confirmed quotation line, written by the system at
+confirmation and never by hand.**
+
+* Created by `assets.create_from_confirmation()`, called from `billing.on_order_confirmed()`
+  — the same hook that builds the billing schedule, so an asset cannot exist for an order
+  nobody confirmed. Idempotent, because both the rep's warehouse-split confirmation and the
+  customer's portal confirmation reach that hook.
+* A **one-time** line becomes an asset with no end date and no MRR. Owning a laptop does not
+  expire, and "what does this customer own" is not a subscription-only question.
+* A **recurring** line gets a term of twelve billing periods — matching the schedule — and an
+  `mrr` **normalised to one month** whatever the plan interval. A quarterly plan billed 900
+  contributes 300. Without normalising, every dashboard has to know the interval, and one of
+  them eventually forgets.
+* `source_line` is unique and PROTECT: a line is bought once, and an asset without its
+  origin cannot be audited.
+
+**Renewals are the reason the entity earns its place.** `create_renewal_quotation()` raises
+one draft quotation covering everything a customer has expiring, **priced at today's price
+list rather than the price on the original order**. A renewal is a new agreement; carrying
+an old price forward silently is how margin leaks, and the rep can see both numbers. Every
+renewed asset is marked and linked to the new quotation, so the same asset cannot be renewed
+twice and the chain is traceable.
+
+**Reason.** It is the smallest addition that unlocks the largest set of questions. MRR, ARR,
+the renewals queue and per-customer revenue all fall out of one table with two indexes. The
+alternative — deriving ownership from quotations on every read — is both slower and wrong,
+because it cannot express cancellation.
+
+**Consequences.** `seed_demo` must delete assets first: they hold PROTECT keys to lines,
+quotations, customers and products, and the second run fails otherwise. That was caught by
+the existing re-seed test rather than on stage.
+
+**Deliberately not built:** amendments and co-terming (changing an asset mid-term rather
+than replacing it), cancellation refunds against assets, and churn analytics. Each needs the
+spine this ADR establishes, and each is a real piece of work. Recorded in NEXT.md.
+
+## ADR-014 — Display currency
+
+**Status:** Accepted
+**Date:** 2026-09-05
+
+> **Renumbered.** This was written as ADR-012, which collided with the self-signup
+> decision of the same number. Renumbered to 014 on 06 Sep; nothing about the decision
+> itself changed. ADR-013 is Assets.
+
+**Context.** Every template hard-coded `&euro;` beside a `floatformat`, so the currency was
+a hundred literals rather than a setting, and the default was wrong for the market this
+product is built for. PDF section 7 lists multi-currency as an explicit bonus, not a
+requirement, so the question is how much to build.
+
+**Decision.** **One display currency on the `SalesSetting` row — code, symbol and rate —
+rendered through a single `money` template filter. Default INR, symbol ₹.**
+
+* Amounts are stored in the base currency and multiplied by `currency_rate` on display.
+  `currency_rate = 1.000000` changes only the symbol; a different rate converts every
+  screen at once.
+* Digits are grouped the Indian way — ₹12,34,567.89 — because 1,234,567 reads as foreign
+  in the default market. Western grouping is one branch away.
+* The setting is cached and the cache is cleared in `SalesSetting.save()`. A page renders
+  this filter dozens of times and must not issue dozens of queries.
+
+**Reason.** This is the smallest thing that is honestly a currency *factor* rather than a
+relabelling: one number, documented, that actually converts. It stops short of
+multi-currency, which needs a per-customer currency, a rate source, and rates as of the
+quotation's date rather than today's — a real piece of work, and a bonus by the PDF's own
+framing. Building half of it and calling it multi-currency would be worse than not building
+it.
+
+**Consequences.** `PriceListEntry.currency` defaults to INR and remains per row, so the
+schema is already shaped for the full version. Fourteen templates lost their `&euro;`
+literals. The CSV export names the currency in its column headers, since a symbol in a
+spreadsheet is ambiguous and a code is not.
+
+**Unblocks:** T-32 (multi-currency, still a bonus and still unbuilt).
+
+---
+

@@ -1,5 +1,9 @@
 # BACKLOG — DealFlow360
 
+> **State: P0 and P1 complete.** Everything below marked ✅ has shipped; 218 tests pass.
+> The only open item is **T-35**, the recorded demo. ADR-007, ADR-008 and ADR-009 — the
+> three decisions this file deferred at T-00 — are now closed in `docs/DECISIONS.md`.
+
 Ordered by priority, then by dependency. Tasks are vertical slices: each one ends with
 something demonstrable, not a layer.
 
@@ -290,38 +294,38 @@ DECISIONS.md cross-check note).
 flag; margin delta shown per suggestion; minimum margin threshold respected; Add to Quote
 and Dismiss; margin indicator updates **immediately** on add.
 
-### T-20 — Subscription lines and hybrid billing
+### T-20 ✅ — Subscription lines and hybrid billing
 **Goal.** FR-29, FR-30, FR-31, BR-5. **Blocked by ADR-008.**
 **Depends on.** T-17.
 **Acceptance.** One-time and recurring lines shown separately on one order; billing
 schedule for recurring lines; proration on mid-cycle quantity change; invariants 9 and 10
 hold. AC-6 passes.
 
-### T-21 — Deal health and anomaly dashboard
+### T-21 ✅ — Deal health and anomaly dashboard
 **Goal.** FR-33, B9. **Blocked by ADR-007.**
 **Depends on.** T-18.
 **Acceptance.** Stalled deals from `last_activity_at`; discount anomalies against rep
 history; click-through to the quotation. Ship stalled-deal detection alone if ADR-007 is
 still open, labelled honestly.
 
-### T-22 — Pipeline Kanban view
+### T-22 ✅ — Pipeline Kanban view
 **Goal.** FR-27, B1.
 **Depends on.** T-11.
 **Acceptance.** Quotations grouped by stage; opening a card opens the builder.
 
-### T-23 — Reporting with filters
+### T-23 ✅ — Reporting with filters
 **Goal.** FR-34, A7. **See ADR-009 item 2 — no Sales Team entity is defined.**
 **Depends on.** T-18.
 **Acceptance.** Filters for Period, Rep, Approval Status, Product/Category; results
 reflect real data.
 
-### T-24 — Consolidate remaining backorder
+### T-24 ✅ — Consolidate remaining backorder
 **Goal.** FR-35, B6.
 **Depends on.** T-16.
 **Acceptance.** When stock arrives for a backordered line, the prompt appears
 **automatically**; accepting consolidates the remaining quantity.
 
-### T-25 — Product variants
+### T-25 ✅ — Product variants
 **Goal.** FR-26, A2.
 **Depends on.** T-05.
 **Acceptance.** Attribute, values and extra prices; variant selectable on a quotation line
@@ -348,11 +352,11 @@ legible if the CDNs are unreachable, but it is not the real theme.
 them with `{% static %}`. Ten minutes of work; do it before the demo rehearsal (T-35), not
 after.
 
-### T-27 — Upsell rule configuration screen (A6, PDF marks it Optional)
-### T-28 — Report export to PDF / XLS (FR-38)
-### T-29 — Automated nudge or escalation from a deal health alert (FR-39)
-### T-30 — Subscription cancel/modify with credit note (FR-32)
-### T-31 — Replenishment rules per warehouse (FR-36, see ADR-009 item 3)
+### T-27 ✅ — Upsell rule configuration screen (A6, PDF marks it Optional)
+### T-28 ✅ — Report export to PDF / XLS (FR-38)
+### T-29 ✅ — Automated nudge or escalation from a deal health alert (FR-39)
+### T-30 ✅ — Subscription cancel/modify with credit note (FR-32)
+### T-31 ✅ — Replenishment rules per warehouse (FR-36, see ADR-009 item 3)
 ### T-32 — Multi-currency or multi-company (FR-40, PDF §7 explicitly a bonus)
 
 ---

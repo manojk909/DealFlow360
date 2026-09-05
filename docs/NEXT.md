@@ -129,12 +129,70 @@ acceptance criterion, and both need the mail infrastructure above.
 
 ---
 
+## Still not built, and why
+
+**Amendments and co-terming.** ADR-013 added assets, so the system now knows what a customer
+owns and can renew it. What it cannot do is *change* an asset mid-term — add ten seats in
+month four and co-term them to the existing end date. Salesforce Revenue Cloud treats this
+as a first-class flow, and it is the single biggest remaining gap. It needs an amendment
+quotation type that references an asset rather than creating one.
+
+**Churn and cohort analytics.** Odoo Subscriptions reports new, churned, expansion, down and
+net-new MRR, plus cohort retention. Every input now exists on the asset table; what is
+missing is a monthly snapshot, because MRR movement is a question about two points in time
+and the current model only knows today.
+
+**Contract lifecycle and e-signature.** Both competitors generate a contract document from
+the quotation, redline it, and collect a signature. This system produces no document at all.
+The quotation print view is the cheap first half; e-signature needs a vendor.
+
+**Product configurator.** Salesforce's Constraint Builder defines which options may be
+combined. Variants exist here; option constraints do not.
+
+
+**One shared read of a quotation's lines.** `pricing`, `risk` and `upsell` each query the
+lines independently, which is why the builder costs about 25 queries where the other screens
+cost three to seven. The cost is constant per request, not per line — asserted in
+`test_query_budget.py` — so it is a latency question rather than a scaling one. Collapsing it
+means threading one line list through three services that are deliberately independent, and
+that independence is what keeps the scoring honest, so it wants doing carefully rather than
+quickly.
+
+**Pagination on the list screens.** Every matching row is rendered. Correct to roughly a
+thousand quotations, after which the cost is HTML size rather than queries. `Paginator` is a
+small change; it was left out because no screen is near that yet and an unused paginator is
+a control that has never been tested.
+
+**Multi-currency conversion.** ADR-012 added a display currency with a rate, so amounts are
+stored in a base currency and converted on the way to the screen. What is missing is more
+than one currency at a time: per-customer currency, a rate source, and rates that were
+correct on the date of the quotation rather than today.
+
+
+**Multi-currency and multi-company.** PDF §7 marks both an explicit bonus. `PriceListEntry`
+already carries a `currency` column, so the data model does not block it; what is missing
+is conversion, a base currency, and a rate source, which is a real piece of work rather
+than a display change.
+
+**Subscription plan changes.** ADR-008 covers *quantity* changes mid-cycle, which is what
+SPEC.md scopes and what B7 names. Moving a line from Monthly to Annual is a different
+question — what happens to the periods already scheduled, and at which price the remainder
+rebuilds — and we would rather leave it undecided than guess it in the last hours.
+
+**Automated escalation beyond a recorded nudge.** FR-39 is built as an audit-logged nudge
+that resets the deal's activity clock. Escalating to a manager's inbox needs email, which
+ADR-004 declined for the same reason it declined portal email: SMTP is a live dependency
+that can only fail during a demo.
+
+**A global warehouse split.** Unchanged from below — still the most interesting thing we
+would do next.
+
 ## What we are confident about
 
 The parts the problem statement said it was actually testing are real and tested. Approval
 routing, discount governance, the warehouse split and the invoice-versus-schedule separation
 are computed in application code from database state, not scripted for the demo. There are
-**170 tests**, and all **eight acceptance criteria** were verified in one continuous pass
+**218 tests**, and all **eight acceptance criteria** were verified in one continuous pass
 against a database rebuilt from nothing, driving the real views over HTTP — the observed
 result for each is recorded in `docs/ACCEPTANCE.md`.
 
