@@ -39,6 +39,12 @@ def quotation_view(request, token):
             "quotation": quotation,
             "token": token,
             "status": negotiation.portal_status(quotation),
-            "lines": quotation.lines.select_related("product").all(),
+            "lines": quotation.lines.select_related(
+                "product", "subscription_plan"
+            ).all(),
+            # Append-only, oldest first: it reads as a conversation.
+            "messages": quotation.portal_messages.select_related(
+                "quotation_line__product"
+            ).order_by("created_at"),
         },
     )

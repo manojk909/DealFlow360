@@ -2,22 +2,148 @@
 {% block title %}Quotation {{ quotation.number }}{% endblock %}
 
 {% block content %}
-<div class="flex flex-wrap items-center justify-between gap-3">
-  <h1 class="text-2xl font-semibold tracking-tight text-slate-900">Your quotation</h1>
-  <span class="rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide
+
+<div class="flex flex-wrap items-start justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight text-slate-900">Your quotation</h1>
+    <p class="mt-1 text-sm text-slate-500">
+      Prepared {{ quotation.created_at|date:"j F Y" }} for {{ quotation.customer.name }}
+    </p>
+  </div>
+  <span class="rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wide
     {% if status == 'Confirmed' %}bg-emerald-100 text-emerald-800
     {% elif status == 'Under Negotiation' %}bg-amber-100 text-amber-800
     {% elif status == 'Closed' %}bg-slate-200 text-slate-600
     {% else %}bg-sky-100 text-sky-800{% endif %}">{{ status }}</span>
 </div>
 
-<p class="mt-2 text-sm text-slate-500">
-  {{ lines|length }} item{{ lines|length|pluralize }} &middot; total
-  <strong class="text-slate-900">&euro;{{ quotation.total|floatformat:2 }}</strong>
+{% if status == 'Under Negotiation' %}
+  <p class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    Your request is with the account team. We will come back to you here &mdash; there is
+    nothing further you need to do right now.
+  </p>
+{% elif status == 'Confirmed' %}
+  <p class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+    Confirmed. Thank you &mdash; this order is now with our fulfilment team.
+  </p>
+{% endif %}
+
+
+{% comment %}
+  Deliberately not a dense grid. A customer reads this once and needs to understand what
+  they are buying and what it costs, so each line is a block with generous spacing and the
+  discount called out rather than buried in a column.
+{% endcomment %}
+<section class="mt-8">
+  <h2 class="text-xs font-semibold uppercase tracking-wide text-slate-400">What is included</h2>
+
+  <div class="mt-3 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
+    {% for line in lines %}
+      <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-4">
+        <div class="min-w-0 flex-1">
+          <div class="font-medium text-slate-900">{{ line.product.name }}</div>
+          <div class="mt-0.5 text-sm text-slate-500">
+            {{ line.qty }} &times; &euro;{{ line.unit_price|floatformat:2 }}
+            {% if line.line_type == 'RECURRING' %}
+              <span class="ml-1 rounded bg-violet-100 px-1.5 py-0.5 text-xs font-medium text-violet-800">
+                {{ line.subscription_plan.get_interval_display|lower }} subscription
+              </span>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if line.discount_pct > 0 %}
+          <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+            {{ line.discount_pct|floatformat:0 }}% off
+          </span>
+        {% endif %}
+
+        <div class="w-28 text-right text-base font-semibold tabular-nums text-slate-900">
+          &euro;{{ line.line_total|floatformat:2 }}
+        </div>
+      </div>
+    {% empty %}
+      <p class="px-5 py-8 text-center text-sm text-slate-400">
+        There are no items on this quotation yet.
+      </p>
+    {% endfor %}
+  </div>
+
+  <dl class="mt-4 space-y-1.5 text-sm">
+    <div class="flex justify-between text-slate-600">
+      <dt>Subtotal</dt><dd class="tabular-nums">&euro;{{ quotation.subtotal|floatformat:2 }}</dd>
+    </div>
+    {% if quotation.order_discount_pct > 0 %}
+      <div class="flex justify-between text-emerald-700">
+        <dt>Order discount</dt><dd class="tabular-nums">{{ quotation.order_discount_pct|floatformat:0 }}%</dd>
+      </div>
+    {% endif %}
+    <div class="flex justify-between border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
+      <dt>Total</dt><dd class="tabular-nums">&euro;{{ quotation.total|floatformat:2 }}</dd>
+    </div>
+  </dl>
+</section>
+
+
+{% comment %}
+  The negotiation thread. Rendered as a conversation - alternating sides, author and time
+  on every message - rather than a form with a list under it, because that is what it is.
+  Append-only: nothing here can be edited or deleted, by anyone. A negotiation history
+  that can be rewritten is not a history (DATA_MODEL.md, PortalMessage).
+{% endcomment %}
+<section class="mt-10">
+  <h2 class="text-xs font-semibold uppercase tracking-wide text-slate-400">Conversation</h2>
+
+  <div class="mt-4 space-y-4">
+    {% for message in messages %}
+      {% if message.author == 'CUSTOMER' %}
+        <div class="flex justify-end">
+          <div class="max-w-[85%]">
+            <div class="rounded-2xl rounded-br-sm bg-sky-600 px-4 py-3 text-sm text-white shadow-sm">
+              {% if message.quotation_line %}
+                <div class="mb-1 text-xs font-medium text-sky-100">
+                  on {{ message.quotation_line.product.name }}
+                </div>
+              {% endif %}
+              {% if message.body %}<p class="whitespace-pre-line">{{ message.body }}</p>{% endif %}
+              {% if message.counter_discount_pct is not None %}
+                <p class="{% if message.body %}mt-2 border-t border-sky-500 pt-2 {% endif %}text-sm font-semibold">
+                  Proposed discount: {{ message.counter_discount_pct|floatformat:0 }}%
+                </p>
+              {% endif %}
+            </div>
+            <div class="mt-1 pr-1 text-right text-xs text-slate-400">
+              You &middot; {{ message.created_at|date:"j M, H:i" }}
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <div class="flex justify-start">
+          <div class="max-w-[85%]">
+            <div class="rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 shadow-sm">
+              {% if message.quotation_line %}
+                <div class="mb-1 text-xs font-medium text-slate-400">
+                  on {{ message.quotation_line.product.name }}
+                </div>
+              {% endif %}
+              <p class="whitespace-pre-line">{{ message.body }}</p>
+            </div>
+            <div class="mt-1 pl-1 text-xs text-slate-400">
+              {{ quotation.rep.name }} &middot; {{ message.created_at|date:"j M, H:i" }}
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    {% empty %}
+      <p class="rounded-xl border border-dashed border-slate-300 px-5 py-8 text-center text-sm text-slate-400">
+        No messages yet. Anything you send here goes straight to {{ quotation.rep.name }}.
+      </p>
+    {% endfor %}
+  </div>
+</section>
+
+<p class="mt-10 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">
+  Asking a question, proposing a different discount and confirming are being added next.
 </p>
 
-<p class="mt-8 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">
-  The line detail, the conversation with your account manager and the option to propose a
-  different discount are being added next.
-</p>
 {% endblock %}
