@@ -1,0 +1,74 @@
+{% extends "core/workspace_base.html" %}
+{% block title %}{{ quotation.number }} &middot; DealFlow360{% endblock %}
+
+{% block content %}
+{# hx-headers here rather than on each control: htmx inherits it, and the CSRF token
+   must survive every partial swap below. #}
+<div hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <a href="{% url 'core:quotation_list' %}" class="text-xs text-slate-500 no-underline hover:text-sky-400">&larr; Quotations</a>
+      <h1 class="mt-1 text-xl font-semibold text-slate-100">
+        {{ quotation.number }} &middot; {{ quotation.customer.name }}
+      </h1>
+      <p class="mt-1 text-sm text-slate-400">
+        Tier {{ quotation.customer.tier.name }} (ceiling {{ quotation.customer.tier.max_discount_pct }}%)
+        &middot; rep {{ quotation.rep.name }}
+      </p>
+    </div>
+    <span class="rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide
+      {% if quotation.stage == 'DRAFT' %}bg-slate-700 text-slate-200
+      {% elif quotation.stage == 'PENDING_APPROVAL' %}bg-amber-900 text-amber-200
+      {% elif quotation.stage == 'APPROVED' %}bg-emerald-900 text-emerald-200
+      {% elif quotation.stage == 'REJECTED' %}bg-rose-900 text-rose-200
+      {% else %}bg-sky-900 text-sky-200{% endif %}">
+      {{ quotation.get_stage_display }}
+    </span>
+  </div>
+
+  <div class="mt-6 grid gap-5 lg:grid-cols-[260px_1fr]">
+
+    <aside class="space-y-4">
+      <h2 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Add a product</h2>
+      {% if editable %}
+        {% for category, products in products_by_category %}
+          <div class="rounded-lg border border-slate-800 bg-slate-900">
+            <h3 class="border-b border-slate-800 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              {{ category.name }}
+            </h3>
+            <div class="p-1">
+              {% for product in products %}
+                <button type="button"
+                        hx-post="{% url 'core:line_add' quotation.pk %}"
+                        hx-vals='{"product_id": "{{ product.pk }}"}'
+                        hx-target="#builder-region" hx-swap="outerHTML"
+                        class="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm text-slate-300 hover:bg-slate-800 hover:text-sky-300">
+                  <span>{{ product.name }}</span>
+                  <span class="tabular-nums text-xs text-slate-500">&euro;{{ product.list_price|floatformat:2 }}</span>
+                </button>
+              {% empty %}
+                <p class="px-2 py-2 text-xs text-slate-600">No active products</p>
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="rounded-lg border border-slate-800 bg-slate-900 p-3 text-xs text-slate-500">
+          This quotation is {{ quotation.get_stage_display|lower }}, so its lines are locked.
+          Only a draft or a quotation under negotiation can be edited.
+        </p>
+      {% endif %}
+
+      <div class="rounded-lg border border-slate-800 bg-slate-900 p-3">
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">Upsell suggestions</h3>
+        <p class="mt-2 text-xs text-slate-600">
+          Not built yet &mdash; T-19. The ranked panel from the mockup goes here.
+        </p>
+      </div>
+    </aside>
+
+    {% include "core/partials/builder_region.html" %}
+  </div>
+</div>
+{% endblock %}

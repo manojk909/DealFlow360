@@ -2,84 +2,46 @@
 
 **Status: NOT STARTED**
 
-Done so far — see `tasks/DONE.md`: T-00 (four blocking ADRs closed), T-01 (scaffold),
-T-02 + T-03 (full schema and seed, one migration wave), and the services integration
-contract.
+Done — see `tasks/DONE.md` and `git log`: T-00, T-01, T-02+T-03, the services contract,
+T-05/T-06/T-07 (admin as the configuration area), T-08 (pricing), T-09 (risk), T-10
+(approval routing) and T-11/T-12/T-13 (the three internal screens).
 
-The database rebuilds from scratch with `migrate` + `seed_demo` in seconds, and the seeded
-Acme quotation scores exactly the 8.00 ADR-005 predicts. No P0 task is blocked by an open
-decision.
+The workspace runs end to end: build a quotation, watch the margin and the per-line
+ceiling check update by HTMX swap, submit, and the system routes it to Manager then
+Finance on its own. 55 tests, all passing, none skipped.
 
 ---
 
-## T-04 — Internal auth and role-based access
+## T-16 — Warehouse split and backorders
 
-### Objective
+**Blocked by nothing.** ADR-006 is Accepted and `core/services/fulfilment.py` is a written
+contract with signatures and docstrings; this task fills in the bodies and builds the
+fulfilment screen.
 
-FR-01. Signup, login, logout, session, and four roles enforced **server-side on every
-action**.
+### The two things that must not be got wrong
 
-### Context
+1. **Non-stocked lines are skipped, not backordered.** Services and Subscriptions have no
+   `Stock` rows at all — correctly, you do not warehouse an engagement. A naive
+   implementation reports the Onsite Setup Service line as a total backorder and the
+   fulfilment screen looks broken on stage. Those line ids belong in
+   `SplitSuggestion.skipped_line_ids`.
+2. **The seeded case must produce 4 + 2.** Laptop Pro 14, quantity 6, Main Warehouse 4 at
+   weight 1.00, East Depot 10 at 1.40. Main is cheapest but cannot cover the line, so the
+   single-shipment shortcut does not fire: 4 from Main, 2 from East, two shipments,
+   estimated cost 6.80. Not one shipment of 6 from East at 8.40 — ADR-006 explains why,
+   and the reasoning matters as much as the number.
 
-`core.User` already exists with `role` (`REP | MANAGER | FINANCE | ADMIN`), email as
-`USERNAME_FIELD`, and Django's password hashers. `seed_demo` creates eight accounts, all
-with the password `dealflow360`; only the ADMIN accounts are `is_staff`/`is_superuser`
-today.
+### Acceptance
 
-What is missing is everything a human uses: there is no login page, no signup page, no
-logout, and no way to check a role before an action.
-
-**The part that is actually scored.** PDF §6 lists role-based access under industry-ready
-system thinking, and T-04's acceptance says a Rep attempting an approval is refused **by
-the server**, not by a hidden button. Build the check first and the button second.
-
-`SESSION_COOKIE_HTTPONLY`, `SESSION_COOKIE_SAMESITE` and `CSRF_COOKIE_SAMESITE` are already
-set in `config/settings.py` from T-01.
-
-### Scope
-
-- Login, logout and signup views in `core/`, using `django.contrib.auth` — do not
-  hand-roll authentication.
-- A role-checking decorator or mixin that views use, e.g. `@require_roles(Role.MANAGER,
-  Role.FINANCE)`, returning 403 rather than redirecting to login when the user is
-  authenticated but wrong-roled. Those are different failures and should not look alike.
-- Django forms for every input, since ARCHITECTURE.md makes forms the place where Odoo's
-  "validate user input robustly" must-have is satisfied.
-- Templates extending `core/templates/core/base.html`, matching the dark theme.
-
-Signup assigns a role. Decide and record whether self-signup may create a MANAGER or
-FINANCE account, or whether it only creates REPs — an unauthenticated visitor granting
-themselves approval rights would make the whole governance story hollow. There is no ADR
-for this; add one if the answer is not obvious.
-
-### Acceptance criteria
-
-- [ ] Signup and login work with hashed passwords; logout ends the session.
-- [ ] Session cookie is httpOnly and sameSite (already set — confirm, do not re-set).
-- [ ] Role is read from the User row and checked server-side on every protected action.
-- [ ] A Rep POSTing directly to an approval URL is refused **by the server**, with a 403,
-      and a test asserts it.
-- [ ] Invalid input is rejected with a visible message, not a stack trace or a silent
-      no-op.
-- [ ] The seeded accounts all log in.
-- [ ] `manage.py test` still passes.
-
-### Out of scope
-
-The approval screen itself (T-13) and the workspace (T-11). This task builds the gate, not
-the rooms behind it. Do not register config models in admin here — that is T-05/T-06/T-07.
-
-### Verification plan
-
-1. Log in as each of the four seeded roles.
-2. `curl -X POST` an approval endpoint as a Rep session and confirm a 403 — not a redirect,
-   not a 200.
-3. Submit each form empty and confirm a visible field error.
-4. Confirm logout actually clears the session by re-requesting a protected page.
+- [ ] Split computed from **live** stock, never cached or seeded.
+- [ ] Shows warehouse, quantity from each, shipment count and estimated cost.
+- [ ] Accept Suggested Split and Manual Override both work; override is re-validated
+      through the same availability rule and refused by the service, not by hiding a control.
+- [ ] Shortfall becomes a backorder row; a non-stocked line does not.
+- [ ] Invariants 6, 7 and 8 hold.
+- [ ] `accept_split` recomputes at commit time rather than trusting the rendered suggestion.
 
 ### Then what
 
-T-05, T-06 and T-07 register the configuration models in Django admin. Those three
-together are what make **AC-1 demonstrable** — a discount tier, a warehouse and a
-subscription plan created through a screen and still there on reload. The rows exist and
-persist today, but nothing can edit them yet.
+T-17 (invoice and payment) completes the cash path, then T-14/T-15 build the customer
+portal — which is the demo's best moment and the last MUST-have screen.

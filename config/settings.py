@@ -111,7 +111,9 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-LOGIN_URL = "/admin/login/"
+LOGIN_URL = "/login/"
+LOGIN_REDIRECT_URL = "/workspace/"
+LOGOUT_REDIRECT_URL = "/login/"
 
 # T-04 acceptance asks for these explicitly; they cost nothing to set correctly now.
 SESSION_COOKIE_HTTPONLY = True

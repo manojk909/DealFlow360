@@ -32,7 +32,10 @@
     </div>
   </header>
 
-  <main class="mx-auto max-w-5xl px-4 py-8">
+  {# Full-width chrome, used by the workspace for its tab bar. #}
+  {% block chrome %}{% endblock %}
+
+  <main class="{% block main_class %}mx-auto max-w-5xl px-4 py-8{% endblock %}">
     {% block content %}{% endblock %}
   </main>
 

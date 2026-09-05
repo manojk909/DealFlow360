@@ -1,0 +1,41 @@
+{% extends "core/base.html" %}
+
+{# The internal rep workspace. Deliberately its own chrome: a bright tab strip, wide
+   content, card surfaces. It must not be mistakable for the Django admin, which is the
+   backend *configuration* area and looks nothing like this. #}
+
+{% block main_class %}mx-auto max-w-7xl px-4 py-6{% endblock %}
+
+{% block chrome %}
+<nav class="border-b border-sky-800 bg-sky-700">
+  <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-1 px-4">
+
+    {% url 'core:quotation_list' as quotations_url %}
+    <a href="{{ quotations_url }}"
+       class="border-b-2 px-3 py-2.5 text-sm font-medium no-underline
+              {% if active == 'quotations' %}border-white text-white{% else %}border-transparent text-sky-100 hover:text-white{% endif %}">
+      Quotations
+    </a>
+
+    <a href="{% url 'core:approval_list' %}"
+       class="border-b-2 px-3 py-2.5 text-sm font-medium no-underline
+              {% if active == 'approvals' %}border-white text-white{% else %}border-transparent text-sky-100 hover:text-white{% endif %}">
+      Approvals
+    </a>
+
+    {# Named in the mockup, not built yet. Shown greyed rather than hidden: an absent
+       feature honestly labelled costs less than one quietly missing. #}
+    {% for label, task in unbuilt %}
+      <span class="cursor-not-allowed px-3 py-2.5 text-sm text-sky-300/50"
+            title="Not built yet — {{ task }}">{{ label }}</span>
+    {% endfor %}
+
+    <span class="ml-auto flex items-center gap-3 py-2 text-xs">
+      <a href="" class="text-sky-100 no-underline hover:text-white" title="Refresh pricing, stock and approval data">Reload data</a>
+      <a href="/admin/" class="text-sky-100 no-underline hover:text-white">Back-end</a>
+      <span class="text-sky-200/70">{{ request.user.name }} &middot; {{ request.user.get_role_display }}</span>
+      <a href="{% url 'core:logout' %}" class="rounded border border-sky-300/40 px-2 py-1 text-sky-100 no-underline hover:bg-sky-800">Close workspace</a>
+    </span>
+  </div>
+</nav>
+{% endblock %}

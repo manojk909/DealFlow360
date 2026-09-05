@@ -1,0 +1,38 @@
+{% extends "core/workspace_base.html" %}
+{% block title %}Approvals &middot; DealFlow360{% endblock %}
+
+{% block content %}
+<h1 class="text-xl font-semibold text-slate-100">Approvals</h1>
+<p class="mt-1 text-sm text-slate-400">
+  Quotations the system routed here on its own. Highest risk score first.
+</p>
+
+<div class="mt-6 space-y-3">
+  {% for row in rows %}
+    <a href="{% url 'core:approval_detail' row.quotation.pk %}"
+       class="flex flex-wrap items-center gap-4 rounded-lg border border-slate-800 bg-slate-900 p-4 no-underline hover:border-amber-700">
+      <div class="min-w-48">
+        <div class="font-medium text-slate-100">{{ row.quotation.customer.name }}</div>
+        <div class="text-xs text-slate-500">{{ row.quotation.number }} &middot; {{ row.quotation.customer.tier.name }} &middot; {{ row.quotation.rep.name }}</div>
+      </div>
+      <div class="tabular-nums text-slate-200">&euro;{{ row.quotation.total|floatformat:2 }}</div>
+      <div class="rounded bg-rose-950 px-2 py-1 text-xs font-semibold text-rose-300">risk {{ row.quotation.risk_score }}</div>
+      <div class="flex items-center gap-1 text-xs">
+        {% for step in row.steps %}
+          <span class="rounded px-1.5 py-0.5
+            {% if step.status == 'APPROVED' %}bg-emerald-900 text-emerald-200
+            {% elif step.status == 'PENDING' %}bg-amber-900 text-amber-200
+            {% else %}bg-slate-800 text-slate-400{% endif %}">{{ step.get_level_display }}</span>
+        {% endfor %}
+      </div>
+      <div class="ml-auto text-xs text-slate-500">
+        {% if row.waiting_on %}waiting on {{ row.waiting_on.get_level_display }}{% endif %}
+      </div>
+    </a>
+  {% empty %}
+    <p class="rounded-lg border border-slate-800 bg-slate-900 p-8 text-center text-sm text-slate-500">
+      Nothing is waiting for approval.
+    </p>
+  {% endfor %}
+</div>
+{% endblock %}
