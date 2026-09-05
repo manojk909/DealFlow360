@@ -1,0 +1,88 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{# Replaces Django's flat alphabetical model list with the sections defined in
+   core/admin_site.py. The sidebar still uses Django's own app_list.html, untouched. #}
+
+{% block coltype %}{% endblock %}
+{% block bodyclass %}{{ block.super }} dashboard{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+
+{% block content %}
+<div id="content-main">
+
+  <p class="df-index-intro">
+    This is the backend configuration area. Everything in the first four sections is
+    configuration you can edit &mdash; discount ceilings, approval bands, shipping weights,
+    subscription plans &mdash; and changing a row here changes system behaviour on the next
+    quotation with no code change. The last three sections are transactional data written
+    by the services layer; computed and append-only rows there are deliberately read-only.
+  </p>
+
+  <div class="df-sections">
+    {% for section in app_list %}
+      <section class="df-section">
+        <header>
+          <h2>{{ section.name }}</h2>
+          {% if section.description %}<p>{{ section.description }}</p>{% endif %}
+        </header>
+        <ul>
+          {% for model in section.models %}
+            <li>
+              {% if model.admin_url %}
+                <a href="{{ model.admin_url }}" class="df-model">{{ model.name }}</a>
+              {% else %}
+                <span class="df-model">{{ model.name }}</span>
+              {% endif %}
+              <span class="df-actions">
+                {% if model.add_url %}
+                  <a href="{{ model.add_url }}">Add</a>
+                {% endif %}
+                {% if model.admin_url %}
+                  {% if model.view_only %}
+                    <a href="{{ model.admin_url }}" class="df-readonly" title="Read-only: written by the services layer, or append-only by design">View</a>
+                  {% else %}
+                    <a href="{{ model.admin_url }}">Browse</a>
+                  {% endif %}
+                {% endif %}
+              </span>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% empty %}
+      <p>{% translate "You don't have permission to view or edit anything." %}</p>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block sidebar %}
+<div id="content-related">
+  <div class="module" id="recent-actions-module">
+    <h2>{% translate 'Recent actions' %}</h2>
+    {% load log %}
+    {% get_admin_log 10 as admin_log for_user user %}
+    {% if not admin_log %}
+      <p style="padding:12px 16px;">{% translate 'None available' %}</p>
+    {% else %}
+      <ul class="actionlist">
+        {% for entry in admin_log %}
+          <li class="{% if entry.is_addition %}addlink{% endif %}{% if entry.is_change %}changelink{% endif %}{% if entry.is_deletion %}deletelink{% endif %}">
+            {% if entry.is_deletion or not entry.get_admin_url %}
+              {{ entry.object_repr }}
+            {% else %}
+              <a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>
+            {% endif %}
+            <br>
+            {% if entry.content_type %}
+              <span class="mini quiet">{% filter capfirst %}{{ entry.content_type.name }}{% endfilter %}</span>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

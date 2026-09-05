@@ -41,13 +41,18 @@ ALLOWED_HOSTS = [
 ]
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    # core comes FIRST so its templates/admin/*.html override Django's own. With
+    # APP_DIRS the first app in this list that has a matching template wins, and the
+    # admin app ships an index.html and base_site.html of its own.
+    "core",
+    # Our AdminConfig subclass, which installs core.admin_site.DealFlowAdminSite as
+    # the default admin site. Replaces "django.contrib.admin" — do not list both.
+    "core.admin_apps.DealFlowAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "core",
     "portal",
 ]
 

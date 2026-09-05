@@ -58,11 +58,6 @@ from core.models import (
     Warehouse,
 )
 
-admin.site.site_header = "DealFlow360 — backend configuration"
-admin.site.site_title = "DealFlow360"
-admin.site.index_title = "Configuration and data"
-
-
 class ReadOnlyAdmin(admin.ModelAdmin):
     """Viewable, never writable through the admin.
 

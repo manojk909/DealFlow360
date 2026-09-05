@@ -1,0 +1,413 @@
+/*
+ * DealFlow360 admin theme.
+ *
+ * Loaded after Django's own admin stylesheets by core/templates/admin/base_site.html.
+ * It only overrides CSS custom properties and a small amount of structure — there is no
+ * fork of Django's admin CSS to keep in sync, so an upgrade cannot silently break it.
+ *
+ * Palette matches core/templates/core/base.html so the configuration area and the
+ * (hand-built) workspace look like one product: slate ground, sky accent.
+ */
+
+/* ------------------------------------------------------------------ palette */
+
+:root,
+html[data-theme="light"] {
+  --primary: #0f766e;
+  --primary-fg: #ffffff;
+  --secondary: #0f766e;
+  --accent: #0ea5e9;
+
+  --body-fg: #1e293b;
+  --body-bg: #f1f5f9;
+  --body-quiet-color: #64748b;
+  --body-loud-color: #0f172a;
+
+  --header-color: #e2e8f0;
+  --header-branding-color: #ffffff;
+  --header-bg: #0f172a;
+  --header-link-color: #ffffff;
+
+  --breadcrumbs-fg: #94a3b8;
+  --breadcrumbs-link-fg: #cbd5e1;
+  --breadcrumbs-bg: #1e293b;
+
+  --link-fg: #0f766e;
+  --link-hover-color: #0ea5e9;
+  --link-selected-fg: #0ea5e9;
+
+  --hairline-color: #e2e8f0;
+  --border-color: #cbd5e1;
+
+  --selected-bg: #e2e8f0;
+  --selected-row: #fef9c3;
+  --darkened-bg: #e2e8f0;
+
+  --button-bg: #0f766e;
+  --button-fg: #ffffff;
+  --button-hover-bg: #115e59;
+  --default-button-bg: #0ea5e9;
+  --default-button-hover-bg: #0284c7;
+  --close-button-bg: #64748b;
+  --close-button-hover-bg: #475569;
+  --delete-button-bg: #dc2626;
+  --delete-button-hover-bg: #b91c1c;
+
+  --object-tools-bg: #334155;
+  --object-tools-fg: #ffffff;
+  --object-tools-hover-bg: #0f172a;
+
+  --font-family-primary: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-family-monospace: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas,
+    monospace;
+}
+
+html[data-theme="dark"] {
+  --primary: #2dd4bf;
+  --primary-fg: #042f2e;
+  --secondary: #14b8a6;
+  --accent: #38bdf8;
+
+  --body-fg: #cbd5e1;
+  --body-bg: #0b1120;
+  --body-quiet-color: #94a3b8;
+  --body-loud-color: #f1f5f9;
+
+  --header-color: #cbd5e1;
+  --header-branding-color: #f8fafc;
+  --header-bg: #111c31;
+  --header-link-color: #f1f5f9;
+
+  --breadcrumbs-fg: #94a3b8;
+  --breadcrumbs-link-fg: #cbd5e1;
+  --breadcrumbs-bg: #0f1830;
+
+  --link-fg: #38bdf8;
+  --link-hover-color: #7dd3fc;
+  --link-selected-fg: #7dd3fc;
+
+  --hairline-color: #1e293b;
+  --border-color: #24334d;
+
+  --selected-bg: #16233c;
+  --selected-row: #1e3a4d;
+  --darkened-bg: #101a2e;
+
+  --button-bg: #0d9488;
+  --button-fg: #f0fdfa;
+  --button-hover-bg: #14b8a6;
+  --default-button-bg: #0284c7;
+  --default-button-hover-bg: #0ea5e9;
+  --close-button-bg: #334155;
+  --close-button-hover-bg: #475569;
+  --delete-button-bg: #b91c1c;
+  --delete-button-hover-bg: #dc2626;
+
+  --object-tools-bg: #1e293b;
+  --object-tools-fg: #e2e8f0;
+  --object-tools-hover-bg: #334155;
+}
+
+/* ------------------------------------------------------------------ header */
+
+#header {
+  padding: 14px 32px;
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+}
+
+#branding h1 {
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+#branding h1 a:link,
+#branding h1 a:visited {
+  color: var(--header-branding-color);
+}
+
+/* A quiet subtitle beside the wordmark, set from base_site.html. */
+#branding .df-tagline {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--body-quiet-color);
+  margin-top: 2px;
+}
+
+div.breadcrumbs {
+  padding: 10px 32px;
+  font-size: 0.8rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* ------------------------------------------------------------------ layout */
+
+#content {
+  padding: 24px 32px 40px;
+}
+
+#content > h1 {
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+
+.module h2,
+.module caption {
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 11px 16px;
+  border-radius: 8px 8px 0 0;
+}
+
+.module {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 22px;
+}
+
+/* ------------------------------------------------------------------ index */
+
+.df-index-intro {
+  color: var(--body-quiet-color);
+  max-width: 68ch;
+  margin: 0 0 26px;
+  line-height: 1.6;
+  font-size: 0.9rem;
+}
+
+.df-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+.df-section {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--darkened-bg);
+  overflow: hidden;
+}
+
+.df-section > header {
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.df-section h2 {
+  margin: 0;
+  padding: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--body-loud-color);
+  background: none;
+}
+
+.df-section p {
+  margin: 6px 0 0;
+  font-size: 0.79rem;
+  line-height: 1.5;
+  color: var(--body-quiet-color);
+}
+
+.df-section ul {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+}
+
+.df-section li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 18px;
+}
+
+.df-section li + li {
+  border-top: 1px solid var(--hairline-color);
+}
+
+.df-section li:hover {
+  background: var(--selected-bg);
+}
+
+.df-section li a.df-model {
+  font-weight: 550;
+  font-size: 0.88rem;
+}
+
+.df-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.df-actions a {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  color: var(--body-quiet-color);
+  white-space: nowrap;
+}
+
+.df-actions a:hover {
+  color: var(--link-hover-color);
+  border-color: var(--link-hover-color);
+}
+
+.df-actions .df-readonly {
+  border-style: dashed;
+  cursor: default;
+}
+
+.df-actions .df-readonly:hover {
+  color: var(--body-quiet-color);
+  border-color: var(--border-color);
+}
+
+/* ------------------------------------------------------------------ tables */
+
+#changelist table {
+  font-size: 0.86rem;
+}
+
+#changelist table thead th {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 10px 12px;
+}
+
+#changelist table tbody td,
+#changelist table tbody th {
+  padding: 9px 12px;
+  vertical-align: middle;
+}
+
+#changelist tbody tr:hover {
+  background: var(--selected-bg);
+}
+
+/* Money and percentages read far better right-aligned and tabular. */
+#changelist table tbody td {
+  font-variant-numeric: tabular-nums;
+}
+
+#changelist-filter {
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+}
+
+#changelist-filter h2 {
+  border-radius: 9px 9px 0 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+}
+
+/* ------------------------------------------------------------------ forms */
+
+.form-row {
+  padding: 12px 16px;
+}
+
+fieldset.module .description {
+  padding: 10px 16px 14px;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--body-quiet-color);
+  border-bottom: 1px solid var(--hairline-color);
+}
+
+fieldset.module .description code {
+  font-family: var(--font-family-monospace);
+  font-size: 0.95em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--selected-bg);
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+input[type="url"],
+textarea,
+select {
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  padding: 7px 9px;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="email"]:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.button,
+input[type="submit"],
+input[type="button"],
+.submit-row input,
+a.button {
+  border-radius: 6px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 8px 15px;
+}
+
+.submit-row {
+  border-radius: 0 0 10px 10px;
+  padding: 14px 16px;
+}
+
+.object-tools a {
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+/* Read-only computed fields should look computed, not like an empty input. */
+.form-row div.readonly {
+  font-family: var(--font-family-monospace);
+  color: var(--body-loud-color);
+  background: var(--darkened-bg);
+  border: 1px dashed var(--border-color);
+  border-radius: 6px;
+  padding: 6px 10px;
+  display: inline-block;
+}
+
+/* ------------------------------------------------------------------ small screens */
+
+@media (max-width: 767px) {
+  #header,
+  div.breadcrumbs,
+  #content {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .df-sections {
+    grid-template-columns: 1fr;
+  }
+}
