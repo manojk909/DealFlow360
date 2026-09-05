@@ -12,17 +12,18 @@ the number stored on the row, so a template never recomputes a total that a serv
 computes. This is what stops the margin indicator and the database disagreeing on stage.
 
 Every function here is `Decimal` in, `Decimal` out, quantised to two places at the point
-a value is stored. Do not introduce a float anywhere in this module.
-
-When this lands, delete `_totals()` from `core/management/commands/seed_demo.py` and call
-`recompute_quotation()` there instead — the seed carries a provisional copy of this
-arithmetic and two implementations of one formula is debt.
+a value is stored. There is no float anywhere in this module, and no `Sum()` over a money
+column — SQLite can return a float from one and drift (ADR-002).
 """
 
 from dataclasses import dataclass
 from decimal import Decimal
 
+from django.db import transaction
+
 CENTS = Decimal("0.01")
+ONE = Decimal("1")
+HUNDRED = Decimal("100")
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,16 @@ class QuotationTotals:
     total: Decimal
     margin_amount: Decimal
     margin_pct: Decimal
+
+
+def _money(value):
+    """Quantise to two places. The only place rounding happens."""
+    return Decimal(value).quantize(CENTS)
+
+
+def _discount_multiplier(pct):
+    """`1 - pct/100`, as a Decimal. A 100% discount gives exactly zero."""
+    return ONE - (Decimal(pct) / HUNDRED)
 
 
 def resolve_unit_price(product, customer, variant=None):
@@ -57,7 +68,18 @@ def resolve_unit_price(product, customer, variant=None):
     Raises:
         ValueError: if `variant` is given and does not belong to `product`.
     """
-    raise NotImplementedError("T-08 — pricing and live margin engine")
+    if variant is not None and variant.product_id != product.pk:
+        raise ValueError(
+            f"Variant {variant.pk} belongs to product {variant.product_id}, not {product.pk}."
+        )
+
+    entry = product.price_entries.filter(tier=customer.tier).first()
+    price = entry.price if entry is not None else product.list_price
+
+    if variant is not None:
+        price = price + variant.extra_price
+
+    return _money(price)
 
 
 def line_total(qty, unit_price, discount_pct):
@@ -79,7 +101,16 @@ def line_total(qty, unit_price, discount_pct):
             database also refuses both (see the CHECK constraints on QuotationLine); this
             check exists so a caller gets a useful error before it reaches SQLite.
     """
-    raise NotImplementedError("T-08 — pricing and live margin engine")
+    qty = int(qty)
+    if qty <= 0:
+        raise ValueError(f"Quantity must be positive, got {qty}.")
+
+    discount_pct = Decimal(discount_pct)
+    if discount_pct < 0 or discount_pct > HUNDRED:
+        raise ValueError(f"Discount must be between 0 and 100, got {discount_pct}.")
+
+    gross = Decimal(qty) * Decimal(unit_price)
+    return _money(gross * _discount_multiplier(discount_pct))
 
 
 def recompute_line(line):
@@ -93,7 +124,9 @@ def recompute_line(line):
     Returns:
         The same instance, mutated, so callers can `bulk_update` a batch.
     """
-    raise NotImplementedError("T-08 — pricing and live margin engine")
+    line.line_total = line_total(line.qty, line.unit_price, line.discount_pct)
+    line.line_cost = _money(Decimal(line.qty) * line.product.cost)
+    return line
 
 
 def recompute_quotation(quotation, save=True):
@@ -113,7 +146,40 @@ def recompute_quotation(quotation, save=True):
     Returns:
         QuotationTotals.
     """
-    raise NotImplementedError("T-08 — pricing and live margin engine")
+    lines = list(quotation.lines.select_related("product").all())
+
+    subtotal = Decimal("0")
+    cost = Decimal("0")
+    for line in lines:
+        recompute_line(line)
+        subtotal += line.line_total
+        cost += line.line_cost
+
+    subtotal = _money(subtotal)
+    total = _money(subtotal * _discount_multiplier(quotation.order_discount_pct))
+    margin_amount = _money(total - cost)
+    margin_pct = _money(margin_amount / total * HUNDRED) if total > 0 else Decimal("0.00")
+
+    totals = QuotationTotals(
+        subtotal=subtotal,
+        total=total,
+        margin_amount=margin_amount,
+        margin_pct=margin_pct,
+    )
+
+    if save:
+        with transaction.atomic():
+            if lines:
+                type(lines[0]).objects.bulk_update(lines, ["line_total", "line_cost"])
+            quotation.subtotal = totals.subtotal
+            quotation.total = totals.total
+            quotation.margin_amount = totals.margin_amount
+            quotation.margin_pct = totals.margin_pct
+            quotation.save(
+                update_fields=["subtotal", "total", "margin_amount", "margin_pct"]
+            )
+
+    return totals
 
 
 def margin_after_adding(quotation, product, qty=1, discount_pct=Decimal("0")):
@@ -125,4 +191,18 @@ def margin_after_adding(quotation, product, qty=1, discount_pct=Decimal("0")):
     Returns:
         Decimal — the hypothetical `margin_pct`.
     """
-    raise NotImplementedError("T-08 — pricing and live margin engine")
+    unit_price = resolve_unit_price(product, quotation.customer)
+
+    subtotal = Decimal("0")
+    cost = Decimal("0")
+    for line in quotation.lines.select_related("product").all():
+        subtotal += line_total(line.qty, line.unit_price, line.discount_pct)
+        cost += _money(Decimal(line.qty) * line.product.cost)
+
+    subtotal += line_total(qty, unit_price, discount_pct)
+    cost += _money(Decimal(qty) * product.cost)
+
+    total = _money(_money(subtotal) * _discount_multiplier(quotation.order_discount_pct))
+    if total <= 0:
+        return Decimal("0.00")
+    return _money((total - cost) / total * HUNDRED)
