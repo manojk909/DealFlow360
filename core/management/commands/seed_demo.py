@@ -10,17 +10,15 @@ Main Warehouse 4, East Depot 10, against a demo order of 6. Single-warehouse ful
 therefore impossible and ADR-006's split is forced to run. Without it AC-5 cannot be
 demonstrated at all. If you change one number here, change it knowing that.
 
-Two pieces of arithmetic below are **temporary duplicates** of logic that belongs in the
-services layer, marked `PROVISIONAL` where they appear:
+**There is no arithmetic in this file.** Totals, margin and the risk score come from
+`core/services/pricing.py` and `core/services/risk.py`, the same functions the application
+uses. An earlier version carried provisional copies of both formulas, because the seed had
+to store numbers before either service existed; those were deleted when T-08 and T-09
+landed, which was a written acceptance criterion on both tasks rather than a comment.
 
-* `_totals()` duplicates `core/services/pricing.py` (T-08).
-* `_risk_score()` duplicates `core/services/risk.py` (T-09), and follows ADR-005 exactly.
-
-They exist because the seed has to store totals and a risk score before either service is
-written, and a quotation list showing 0.00 for every card is not a demo. When T-08 and T-09
-land, both are deleted and replaced by calls into the services. If a service and one of
-these ever disagree, **the service is right** — these are scaffolding, not a second
-implementation. Tracked in BACKLOG under T-08 and T-09.
+That matters for more than tidiness: the seeded risk score of 8.00 on Q-2026-0003 is now
+produced by the same code path that scores a quotation at submit time, so the demo data
+cannot drift away from the behaviour it is demonstrating.
 """
 
 from datetime import timedelta
@@ -31,6 +29,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
+from core.services import pricing, risk
 from core.models import (
     ApprovalChainRule,
     ApprovalStep,
@@ -67,52 +66,6 @@ def _money(value):
     return Decimal(value).quantize(CENTS)
 
 
-def _totals(lines, order_discount_pct=Decimal("0")):
-    """
-    PROVISIONAL — duplicates core/services/pricing.py (T-08). Delete when that lands.
-
-    line_total = qty * unit_price * (1 - discount/100), then the order discount applies
-    to the sum. Decimal throughout; never a float and never a SQLite Sum() (ADR-002).
-    """
-    subtotal = Decimal("0")
-    cost = Decimal("0")
-    for line in lines:
-        gross = Decimal(line.qty) * line.unit_price
-        line.line_total = _money(gross * (Decimal("1") - line.discount_pct / 100))
-        line.line_cost = _money(Decimal(line.qty) * line.product.cost)
-        subtotal += line.line_total
-        cost += line.line_cost
-    total = _money(subtotal * (Decimal("1") - order_discount_pct / 100))
-    margin_amount = _money(total - cost)
-    margin_pct = (
-        _money(margin_amount / total * 100) if total > 0 else Decimal("0.00")
-    )
-    return _money(subtotal), total, margin_amount, margin_pct
-
-
-def _risk_score(lines, tier, ceilings_by_category, order_discount_pct=Decimal("0")):
-    """
-    PROVISIONAL — duplicates core/services/risk.py (T-09). Delete when that lands.
-
-    ADR-005 exactly: given = 100 * (1 - (1 - line/100) * (1 - order/100));
-    allowed = min(tier ceiling, category ceiling); over = max(0, given - allowed);
-    score = sum of over, quantised to 0.01.
-    """
-    score = Decimal("0")
-    for line in lines:
-        given = Decimal("100") * (
-            Decimal("1")
-            - (Decimal("1") - line.discount_pct / 100)
-            * (Decimal("1") - order_discount_pct / 100)
-        )
-        category_ceiling = ceilings_by_category.get(line.product.category.name)
-        allowed = tier.max_discount_pct
-        if category_ceiling is not None:
-            allowed = min(allowed, category_ceiling)
-        score += max(Decimal("0"), given - allowed)
-    return score.quantize(CENTS)
-
-
 class Command(BaseCommand):
     help = "Reset the database to the exact demo state in docs/DEMO.md. Idempotent."
 
@@ -125,7 +78,7 @@ class Command(BaseCommand):
         users = self._seed_users()
         tiers = self._seed_tiers()
         categories = self._seed_categories()
-        ceilings = self._seed_category_ceilings(tiers, categories)
+        self._seed_category_ceilings(tiers, categories)
         self._seed_chain_rules()
         customers = self._seed_customers(tiers)
         plans = self._seed_subscription_plans()
@@ -135,7 +88,7 @@ class Command(BaseCommand):
         self._seed_product_pairs(products)
         warehouses = self._seed_warehouses()
         self._seed_stock(products, warehouses)
-        quotations = self._seed_quotations(users, customers, products, tiers, ceilings)
+        quotations = self._seed_quotations(users, customers, products)
 
         self._report(quotations)
 
@@ -398,9 +351,14 @@ class Command(BaseCommand):
         entry = PriceListEntry.objects.filter(product=product, tier=customer.tier).first()
         return entry.price if entry else product.list_price
 
-    def _build(self, number, customer, rep, stage, line_specs, tier, ceilings,
+    def _build(self, number, customer, rep, stage, line_specs,
                order_discount_pct=Decimal("0"), days_idle=0):
-        """Create one quotation with its lines, totals and risk score."""
+        """Create one quotation, then let the services compute its money and its score.
+
+        The tier ceiling and the category ceilings are not passed in: `score_for_quotation`
+        reads them from the database itself, which is the point — the seed configures
+        governance and then asks the real scorer what that configuration produces.
+        """
         activity = self.now - timedelta(days=days_idle)
         quotation = Quotation.objects.create(
             number=number,
@@ -428,29 +386,27 @@ class Command(BaseCommand):
             )
             lines.append(line)
 
-        subtotal, total, margin_amount, margin_pct = _totals(lines, order_discount_pct)
         QuotationLine.objects.bulk_create(lines)
 
-        quotation.subtotal = subtotal
-        quotation.total = total
-        quotation.margin_amount = margin_amount
-        quotation.margin_pct = margin_pct
-        quotation.risk_score = _risk_score(lines, tier, ceilings, order_discount_pct)
-        quotation.save()
+        # Line totals, order total and margin — core/services/pricing.py (T-08).
+        pricing.recompute_quotation(quotation)
+
+        # Blended risk score — core/services/risk.py (T-09), reading the ceiling rows
+        # seeded above. Snapshotted here the way approval.py snapshots it at submit.
+        quotation.risk_score = risk.score_for_quotation(quotation).score
+        quotation.save(update_fields=["risk_score"])
         return quotation
 
-    def _seed_quotations(self, users, customers, products, tiers, gold_ceilings):
+    def _seed_quotations(self, users, customers, products):
         rep = users["rep@dealflow.test"]
         acme, beta, cirrus = customers["Acme Corp"], customers["Beta Industries"], customers["Cirrus Ltd"]
-        no_ceilings = {}  # Silver and Bronze have no category rows — see _seed_category_ceilings
-
         made = {}
 
         # --- Q-2026-0001: Flow A starts here. Draft, deliberately EMPTY.
         # DEMO.md step A2 expects "empty cart, margin indicator neutral" — the rep builds
         # the lines live on stage. Its risk score is therefore 0.00, which is correct.
         made["draft"] = self._build(
-            "Q-2026-0001", acme, rep, Quotation.Stage.DRAFT, [], tiers["Gold"], gold_ceilings
+            "Q-2026-0001", acme, rep, Quotation.Stage.DRAFT, []
         )
 
         # --- Q-2026-0002: Flow B starts here. Sent, with a live portal token.
@@ -466,8 +422,6 @@ class Command(BaseCommand):
                 (products["Laptop Pro 14"], 3, "5.00"),
                 (products["Onsite Setup Service"], 1, "8.00"),
             ],
-            tiers["Silver"],
-            no_ceilings,
         )
         beta_quote.portal_token = signing.TimestampSigner().sign(str(beta_quote.pk))
         beta_quote.save(update_fields=["portal_token"])
@@ -490,8 +444,6 @@ class Command(BaseCommand):
                 (products["Laptop Pro 14"], 6, "12.00"),
                 (products["Onsite Setup Service"], 1, "18.00"),
             ],
-            tiers["Gold"],
-            gold_ceilings,
         )
         ApprovalStep.objects.create(
             quotation=pending, sequence=1, level=ApprovalStep.Level.MANAGER
@@ -518,8 +470,6 @@ class Command(BaseCommand):
                 (products["Docking Station X3"], 8, "4.00"),
                 (products["Wireless Headset Duo"], 8, "3.00"),
             ],
-            tiers["Bronze"],
-            no_ceilings,
             days_idle=14,
         )
         AuditLog.objects.create(
@@ -537,8 +487,6 @@ class Command(BaseCommand):
                 (products['27" 4K Monitor'], 4, "6.00"),
                 (products["Data Migration Service"], 1, "5.00"),
             ],
-            tiers["Silver"],
-            no_ceilings,
         )
         invoice = Invoice.objects.create(
             quotation=paid,

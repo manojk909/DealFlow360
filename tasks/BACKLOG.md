@@ -153,10 +153,8 @@ BillingScheduleEntry stays out of P0 and lands with T-20).
 - Order total applies the order-level discount after line discounts.
 - Margin amount and percentage computed from product cost.
 - Unit tests covering zero discount, full line discount, and a mixed line-plus-order discount.
-- **Delete `_totals()` from `core/management/commands/seed_demo.py`** and call this service
-  instead. The seed carries a provisional copy of the arithmetic so quotation cards are not
-  all 0.00 before T-08 lands; two implementations of the same formula is debt, and it is
-  paid off here.
+- ~~Delete `_totals()` from `seed_demo.py` and call this service instead.~~ **Done.** The
+  seed now calls `pricing.recompute_quotation()`; there is no arithmetic left in it.
 - Server is the single source of truth for totals; the UI displays what the server computed.
 
 ### T-09 — Blended discount risk score
@@ -171,8 +169,9 @@ BillingScheduleEntry stays out of P0 and lands with T-20).
 - Reproduces PDF §10 example 2: several lines 2–3 points over accumulate into a flag.
 - Unit tests asserting both examples. These two tests are the specification. They already
   exist at `core/tests/test_risk.py` and currently skip; this task is what un-skips them.
-- **Delete `_risk_score()` from `core/management/commands/seed_demo.py`** and call this
-  service instead, for the same reason as T-08.
+- ~~Delete `_risk_score()` from `seed_demo.py` and call this service instead.~~ **Done.**
+  The seed now calls `risk.score_for_quotation()`, so the seeded 8.00 comes from the same
+  code path that scores a quotation at submit time.
 
 ### T-10 — Automatic approval routing and audit trail
 **Goal.** FR-13, FR-15, FR-16, BR-2, BR-3.
