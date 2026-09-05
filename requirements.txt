@@ -1,0 +1,5 @@
+# DealFlow360 — ADR-001 (Django 5) and ADR-002 (SQLite).
+# Deliberately tiny: HTMX and Tailwind are CDN <script> tags, not Python packages.
+
+Django==5.2.17
+python-dotenv==1.2.3

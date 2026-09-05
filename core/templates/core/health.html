@@ -1,0 +1,57 @@
+{% extends "core/base.html" %}
+
+{% block title %}Health · DealFlow360{% endblock %}
+
+{% block content %}
+  <h1 class="text-2xl font-semibold text-slate-100">System health</h1>
+  <p class="mt-2 max-w-2xl text-sm text-slate-400">
+    Every value below is read from <code class="text-slate-300">db.sqlite3</code> on each
+    request. If the database were missing or unmigrated this page would error rather than
+    render.
+  </p>
+
+  <dl class="mt-8 grid gap-px overflow-hidden rounded-lg border border-slate-800 bg-slate-800 sm:grid-cols-2">
+    <div class="bg-slate-900 px-5 py-4">
+      <dt class="text-xs uppercase tracking-wide text-slate-500">Database engine</dt>
+      <dd class="mt-1 text-slate-100">{{ db_vendor }} {{ sqlite_version }}</dd>
+    </div>
+    <div class="bg-slate-900 px-5 py-4">
+      <dt class="text-xs uppercase tracking-wide text-slate-500">Database file</dt>
+      <dd class="mt-1 break-all text-sm text-slate-100">{{ db_name }}</dd>
+    </div>
+    <div class="bg-slate-900 px-5 py-4">
+      <dt class="text-xs uppercase tracking-wide text-slate-500">Applied migrations</dt>
+      <dd class="mt-1 text-slate-100">
+        {{ applied_migrations }}
+        {% if latest_migration %}
+          <span class="text-sm text-slate-500">
+            (latest: {{ latest_migration.0 }}.{{ latest_migration.1 }})
+          </span>
+        {% endif %}
+      </dd>
+    </div>
+    <div class="bg-slate-900 px-5 py-4">
+      <dt class="text-xs uppercase tracking-wide text-slate-500">AUTH_USER_MODEL</dt>
+      <dd class="mt-1 text-slate-100">{{ auth_user_model }}</dd>
+    </div>
+    <div class="bg-slate-900 px-5 py-4">
+      <dt class="text-xs uppercase tracking-wide text-slate-500">Users in database</dt>
+      <dd class="mt-1 text-slate-100">{{ user_count }}</dd>
+    </div>
+    <div class="bg-slate-900 px-5 py-4">
+      <dt class="text-xs uppercase tracking-wide text-slate-500">Roles present</dt>
+      <dd class="mt-1 text-slate-100">
+        {% for role in users_by_role %}
+          <span class="mr-1 rounded bg-slate-800 px-2 py-0.5 text-xs">{{ role }}</span>
+        {% empty %}
+          <span class="text-sm text-slate-500">none yet — run createsuperuser</span>
+        {% endfor %}
+      </dd>
+    </div>
+  </dl>
+
+  <p class="mt-8 text-sm text-slate-500">
+    T-01 scaffold. The rep workspace (T-11), approval screen (T-13) and customer portal
+    (T-14) are not built yet.
+  </p>
+{% endblock %}

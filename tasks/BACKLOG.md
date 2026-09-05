@@ -306,6 +306,16 @@ explicitly scored regardless of features.**
 
 # P2 — BONUS
 
+### T-26a — Vendor Tailwind and HTMX locally instead of CDN
+**Noticed during T-01, not fixed there.** `core/templates/core/base.html` pulls Tailwind
+and HTMX from CDNs. Odoo's guidance is to "plan for offline or local solutions and don't
+rely entirely on internet connectivity", and the venue wifi is a live dependency during a
+five-minute demo. A minimal inline fallback stylesheet is in `base.html` so the app stays
+legible if the CDNs are unreachable, but it is not the real theme.
+**Fix.** Download `tailwind.js` and `htmx.min.js` into `core/static/vendor/` and serve
+them with `{% static %}`. Ten minutes of work; do it before the demo rehearsal (T-35), not
+after.
+
 ### T-27 — Upsell rule configuration screen (A6, PDF marks it Optional)
 ### T-28 — Report export to PDF / XLS (FR-38)
 ### T-29 — Automated nudge or escalation from a deal health alert (FR-39)
