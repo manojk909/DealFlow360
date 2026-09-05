@@ -65,8 +65,11 @@ Where the problem statement leaves something genuinely unspecified — the exact
 arithmetic, the split algorithm, the proration basis — we recorded it as an open decision
 in `docs/DECISIONS.md` rather than inventing an answer and hoping nobody asked.
 
-Four members, four parallel tracks: configuration and catalogue; quotation and governance;
-portal and workspace; inventory and billing. All four commit to the repository.
+**Correction, added at Round 2:** this section originally described four members working
+four parallel tracks. The build is solo — one member, Team 317. The four tracks remain a
+useful description of how the work is *ordered*, but they are worked sequentially, and
+parallelism comes from delegating independent, non-overlapping work rather than from
+additional people.
 
 ### Status at this round
 
@@ -134,8 +137,9 @@ tasks come up rather than guessing now.
 
 **Risks.**
 
-- Only one machine has run the scaffold so far. All four of us need to clone and run it
-  before we build on it in parallel.
+- Solo build, so there is no second machine and no second reviewer. Everything is verified
+  by exercising it — deleting the database and rebuilding from migrations plus the seed
+  script — rather than by someone else trying it.
 - Tailwind and HTMX load from CDNs today. The venue network is a dependency we do not want
   during a five-minute demo, so vendoring them locally is on the backlog ahead of the
   rehearsal.

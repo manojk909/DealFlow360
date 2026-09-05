@@ -91,7 +91,7 @@ health page that proves the URL → view → ORM → SQLite → template round t
 | `.gitignore` excludes `db.sqlite3`, `__pycache__/`, `.venv/`, `.env` | `git status --ignored` confirms all four are ignored; `db.sqlite3` is absent from a fresh clone |
 | `requirements.txt` pins Django and very little else | Two lines: `Django==5.2.17`, `python-dotenv==1.2.3`. HTMX and Tailwind are CDN script tags, not Python packages |
 | `README.md` runnable from a clean clone | **Actually performed.** Cloned into a scratch directory, created a venv, installed from `requirements.txt`, migrated, created a superuser and ran the server on port 8138 following only the README. `/health/` → 200 showing 1 user and an `ADMIN` role, read from the clone's own fresh database |
-| All four members have cloned and run it | **NOT verified — this one is on the team.** See Remaining risks below |
+| All four members have cloned and run it | **N/A — closed, not skipped.** This is a solo build (Team 317, one member). Odoo's version-control must-have — "one member managing the repo is not enough" — exists so a multi-member team cannot have one person do all the committing; with a team of one there is nothing to check. The criterion was written when the plan assumed four developers. |
 
 **Decisions taken inside the task.**
 
@@ -113,7 +113,8 @@ catches it.
 
 **Remaining risks.**
 
-- Only one machine has run this. The "all four members" criterion is genuinely unverified.
+- Only one machine has run this, and being solo there is no second machine to try it on.
+  The clean-clone test is the substitute: it proves the README works from nothing.
 - Tailwind and HTMX load from CDNs, so the UI degrades to a minimal inline fallback with no
   network. Logged as **T-26a**; vendor them before the demo rehearsal.
 - `/health/` is the only page. Nothing else is built yet, and nothing should be read into

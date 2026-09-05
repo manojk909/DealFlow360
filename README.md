@@ -8,7 +8,9 @@ inventory by splitting fulfilment across warehouses, keeps one-time and recurrin
 subscription lines reconciled on a single order, and gives customers a living, negotiable
 quotation in their own portal instead of a static PDF.
 
-Built for the Odoo Hackathon 2026 by **Team 317**.
+Built for the Odoo Hackathon 2026 by **Team 317** (solo build).
+
+**Requires Python 3.10 or newer** — see Setup below.
 
 ---
 
@@ -28,7 +30,7 @@ the task in progress.
 
 | Layer | Choice |
 |---|---|
-| Framework | Django 5.2 on Python 3.10+ (developed on 3.13) |
+| Framework | Django 5.2.17 |
 | Database | SQLite — one local file, `db.sqlite3` (ADR-002) |
 | Templates | Django templates + HTMX, Tailwind via CDN |
 | Auth | `django.contrib.auth` with a custom `core.User` carrying `role` (ADR-003) |
@@ -52,6 +54,15 @@ cd DealFlow360
 ```
 
 ### 2. Create and activate a virtual environment
+
+**Minimum Python version: 3.10.** Django 5.2 supports 3.10 through 3.13. Developed and
+verified on **3.13.5**. Check yours before going further:
+
+```bash
+python --version
+```
+
+Anything below 3.10 will fail at `pip install`, not at runtime, so you will know immediately.
 
 ```bash
 python -m venv .venv

@@ -11,7 +11,7 @@ subscription lines reconciled on a single order, and gives customers a living, n
 quotation in their own portal instead of a static PDF.
 
 **Hackathon context:** Odoo Hackathon 2026 final round, 24 hours (05 Sep 10:00 IST →
-06 Sep 10:00 IST). Team 317, 4 members. Evaluator: Karan Israni (kais@odoo.com,
+06 Sep 10:00 IST). Team 317, **1 member — this is a solo build.** Evaluator: Karan Israni (kais@odoo.com,
 GitHub `kais-odoo` / `hackathon-odoo`). Deliverables due: video links 06 Sep 10:30,
 presentation 13:00.
 
@@ -79,7 +79,10 @@ demo. Specifically, per the problem statement and Odoo's stated must-haves:
   screen with a different label. This is called out explicitly in the PDF.
 - If a feature is not finished, it is absent or clearly labelled incomplete. Never fake a
   result to make the walkthrough work.
-- Git history must show commits from **all four members**. Odoo lists this as a must-have.
+- Odoo's version-control must-have is that "one member managing the repo is not enough" —
+  it exists so a multi-member team cannot have one person do all the committing. **With a
+  team of one there is nothing to satisfy.** What still applies: real commits throughout
+  the build rather than one dump at the end, and messages that explain why.
 
 ## Resolving open decisions — YOU are authorised to close these
 

@@ -6,7 +6,9 @@
 migrations, no `.claude/` config, no `.env`. Everything below is greenfield and nothing
 here is constrained by existing code.
 
-Verified on the dev machine: Python 3.10.12, pip 25.3, Node v22.23.2, Java 11, git 2.34.1.
+Verified on the dev machine at T-01: **Python 3.13.5**, pip 25.3, Node v22.23.2, Java 11,
+git 2.47.0. (An earlier draft of this file recorded Python 3.10.12; that was wrong, and
+ADR-001 carries the same correction.)
 **Not present:** Docker, `psql`, Go, pnpm.
 
 ## Tech stack — FINAL
@@ -15,7 +17,7 @@ Confirmed by the team. See ADR-001 and ADR-002.
 
 | Layer | Choice | Why |
 |---|---|---|
-| Framework | **Django 5** (Python 3.10) | Batteries included. `django.contrib.auth` and `django.contrib.admin` cover authentication, roles and the entire backend configuration area (SPEC §4 A2–A7) with almost no code — that is roughly seven CRUD screens we do not write by hand. |
+| Framework | **Django 5.2.17** on **Python 3.13.5** (code targets 3.10+; Django 5.2 supports 3.10-3.13) | Batteries included. `django.contrib.auth` and `django.contrib.admin` cover authentication, roles and the entire backend configuration area (SPEC §4 A2–A7) with almost no code — that is roughly seven CRUD screens we do not write by hand. |
 | ORM & migrations | **Django ORM** | Built in. Models, migrations, admin and forms all derive from one model definition. |
 | Database | **SQLite** (`db.sqlite3`) | Django's default backend, zero config, one file in the repo. Explicitly local, per the invigilator's requirement. Postgres is not installed and Docker is unavailable, so local Postgres would mean an install on four laptops mid-build. |
 | Templates & interactivity | **Django templates + HTMX**, small vanilla JS where needed | HTMX is one `<script>` tag and no build step. The live margin indicator and upsell panel are partial-template swaps, not a client-side app. Avoids reintroducing the two-codebase problem a React SPA would bring back. |

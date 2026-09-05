@@ -12,12 +12,14 @@ event rules are recorded as Accepted. Everything the PDF leaves open is listed a
 **Date:** 2026-09-05
 
 **Context.** `DealFlow360/` was empty, so nothing constrained the choice. PDF §7 allows any
-language, framework and database. Available on the dev machine: Python 3.10.12, pip, Node
+language, framework and database. Available on the dev machine: Python **3.13.5** (this ADR
+originally recorded 3.10.12, which was wrong — corrected at T-02), pip, Node
 22, Java 11, git. Not available: Docker, `psql`, Go. Roughly 22 hours remain, with 4
 developers. Next.js + Prisma and FastAPI + React were both considered and rejected — see
 Consequences.
 
-**Decision.** **Django 5 on Python 3.10**, Django ORM, Django templates with HTMX for
+**Decision.** **Django 5.2 on Python 3.13** (the code targets 3.10+, which Django 5.2
+supports through 3.13), Django ORM, Django templates with HTMX for
 interactivity, Tailwind via CDN for styling, `django.contrib.auth` for authentication, and
 Django's built-in test runner.
 

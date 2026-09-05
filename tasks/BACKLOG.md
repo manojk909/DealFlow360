@@ -3,17 +3,30 @@
 Ordered by priority, then by dependency. Tasks are vertical slices: each one ends with
 something demonstrable, not a layer.
 
-**Team: 4 members.** Suggested ownership tracks — after T-01/T-02/T-03 land, these run in
-parallel:
+**Team: 1 member.** This is a solo build. An earlier version of this file assigned four
+ownership tracks to four developers; that table has been removed rather than left to
+describe a team that does not exist.
 
-| Track | Owner | Tasks |
-|---|---|---|
-| **A — Config & catalogue** | Dev 1 | T-04, T-05, T-07, then T-23, T-25 |
-| **B — Quotation & governance** | Dev 2 | T-06, T-08, T-09, T-10, T-13 |
-| **C — Portal & workspace** | Dev 3 | T-11, T-12, T-14, T-15, then T-19, T-22 |
-| **D — Inventory & billing** | Dev 4 | T-16, T-17, then T-20, T-21, T-24 |
+**Task order and dependencies below are unchanged.** They were derived from what each task
+needs, not from who was going to do it, so they hold exactly as written for one person.
+The critical path is still **T-06 → T-08 → T-09 → T-10 → T-13** — quotation and governance.
+If that slips, everything else is decoration.
 
-Track B is the critical path. If it slips, everything else is decoration.
+**Parallelism comes from subagents, not from people.** The same rule applies to them as
+applied to four developers, and for the same reason: if two pieces of work would touch the
+same file, they are one task. See CLAUDE.md's "Working with subagents" for what is safe to
+fan out — pure logic in `core/services/`, tests for a service someone else is implementing,
+templates for non-overlapping screens — and what never is: `makemigrations`, edits to
+`core/models/`, `settings.py`, `config/urls.py`, `requirements.txt`.
+
+Two consequences of being solo, worth stating so they are not rediscovered late:
+
+- **Migration waves are cheap now.** The four-developer version of this plan feared two
+  people generating migrations for `core` in parallel. One person cannot collide with
+  themselves, so a schema change costs a `makemigrations` and nothing else.
+- **Serialisation is the default, so scope discipline matters more.** Four tracks could
+  absorb an over-ambitious backlog; one cannot. P0 ships before P1 starts, and T-18 (the
+  eight acceptance criteria) is the gate.
 
 ---
 
@@ -51,7 +64,10 @@ Track B is the critical path. If it slips, everything else is decoration.
 - `python manage.py migrate` applies cleanly against `db.sqlite3`.
 - README records the setup commands another team member can follow from a clean clone.
 - `.gitignore` excludes `db.sqlite3`, `__pycache__/`, `.venv/`, `.env`.
-- All four members have cloned and run it successfully.
+- ~~All four members have cloned and run it successfully.~~ **N/A — solo build.** Odoo's
+  rules permit a team of one, and the "one member managing the repo is not enough"
+  requirement targets multi-member teams: it exists so a four-person team cannot have
+  one person do all the committing. With a single member there is no such thing to check.
 
 ### T-02 — Schema and migrations for the P0 entities
 **Goal.** DATA_MODEL.md's MUST entities exist as tables.
