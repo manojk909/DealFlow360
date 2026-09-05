@@ -2,7 +2,7 @@
 
 **Status: NONE IN PROGRESS.**
 
-Everything in the P0 and P1 backlogs is shipped and green. **293 tests pass.** The three
+Everything in the P0 and P1 backlogs is shipped and green. **306 tests pass.** The three
 ADRs that were blocking P1 — ADR-007 (deal health thresholds), ADR-008 (proration basis),
 ADR-009 (tax / sales team / replenishment) — are closed and recorded in `docs/DECISIONS.md`.
 

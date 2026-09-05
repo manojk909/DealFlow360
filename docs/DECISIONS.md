@@ -962,3 +962,52 @@ suggestion is recomputed per line against the live quotation rather than cached.
 the approvals queue showed rows with no chain and nothing waiting on anyone. They are now
 routed through `approval.required_levels()` — the same rule a live submit applies.
 
+---
+
+## ADR-017 — Two bounds: the policy ceiling and the economic floor
+
+**Status:** Accepted
+**Date:** 2026-09-06
+
+**Context.** Every discount control in this system, and in every competitor's, is a
+**percentage ceiling**: Gold may have 15%, Services only 10%. But margin is not a
+percentage of a percentage — it is a fact about a particular product. Fifteen percent off a
+laptop carrying 28% margin is healthy. Fifteen percent off a service carrying 12% is
+selling below cost. A rep can be comfortably inside every ceiling the company configured
+and still be giving the product away, and nothing on the screen would say so.
+
+Separately: the system only told a rep their discount was a problem *after* they submitted,
+when the quotation came back needing two approvals. At that point the information changes
+the paperwork. Before submitting, it would have changed the discount.
+
+**Decision.** **Show both bounds, on the rep's own screen, while they are still typing.**
+
+1. **The floor.** `margin_floor_discount()` returns the line discount at which the line
+   sells at cost — `given = 100 x (1 - cost / unit_price)`, inverted through the
+   order-discount compounding so the figure is directly comparable to the number in the
+   discount box. It sits in a **Floor** column beside **Limit**, and turns red once the
+   line's discount reaches it. Rounded **down**, so a quoted floor never sells below cost.
+   A line whose cost already meets its price has no floor to quote and says so rather than
+   printing a negative percentage.
+2. **The routing preview.** `routing_preview()` answers "what approval would this attract
+   if I submitted it now" — through the same `approval.required_levels()` a real submit
+   calls, so a preview cannot promise one chain and the submit produce another. Alongside
+   it, the ADR-016 solver names the discount that would avoid the approval entirely.
+
+**Reason.** The two bounds answer different questions and a governance system needs both.
+The ceiling protects *policy* — what the company has decided to allow. The floor protects
+*economics* — what the business survives. Enforcing only the first is how a company ends up
+with a rep who never broke a rule and never made a margin.
+
+Both are inversions of arithmetic the system already performs, so neither introduces a
+second source of truth. The floor reads `Product.cost`, which the margin indicator has read
+since T-08; the preview reads the same chain rules the approval screen does.
+
+**Consequences.** `risk.py` gains two read-only functions. The builder's live region carries
+one extra column and one banner, both recomputed in the same HTMX swap as everything else,
+so the query budget is unchanged. Neither writes anything.
+
+**Not built:** a *configurable* floor — a minimum margin per category, rather than zero. The
+PDF names a minimum-margin threshold only for upsell suggestions (ADR-011), and inventing a
+second one here would be a rule nobody asked for.
+

@@ -289,6 +289,11 @@ def _builder_state(quotation, error=None, dismissed=()):
             {
                 "line": line,
                 "risk": by_line.get(line.pk),
+                # ADR-017. The second bound: policy says how much may be given, this says
+                # how much the line can afford. Both belong on the same row.
+                "floor_pct": risk.margin_floor_discount(
+                    line.unit_price, line.product.cost, quotation.order_discount_pct
+                ),
                 # Sorted in Python: the prefetch above already has the rows, and calling
                 # .order_by() here would discard it and re-query per line.
                 "variants": sorted(
@@ -308,6 +313,12 @@ def _builder_state(quotation, error=None, dismissed=()):
         # refresh so the product just added stops being suggested.
         "suggestions": upsell.suggest(quotation, exclude_product_ids=dismissed),
         "min_margin_pct": upsell.DEFAULT_MIN_MARGIN_PCT,
+        # ADR-017. What this quotation would cost the rep in approvals if submitted now,
+        # and the discounts that would avoid it. Both read-only.
+        "routing": risk.routing_preview(quotation),
+        "clearing": {
+            row["line"].pk: row for row in risk.what_would_clear_this(quotation) if row["line"]
+        },
         # The partial disables its own controls on this; the endpoints enforce it too.
         "editable": _is_editable(quotation),
     }

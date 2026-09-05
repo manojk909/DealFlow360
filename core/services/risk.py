@@ -335,3 +335,70 @@ def what_would_clear_this(quotation):
             }
         )
     return suggestions
+
+
+def margin_floor_discount(unit_price, cost, order_discount_pct=Decimal("0")):
+    """The line discount at which this line sells **at cost** — the walk-away point.
+
+    The ceiling says what policy permits. This says what the business survives. A rep can
+    be comfortably inside every ceiling and still be giving the product away, because a
+    ceiling is a percentage and margin is a fact about this particular product: 15% off a
+    laptop that carries 28% margin is fine, and 15% off a service that carries 12% is
+    selling below cost.
+
+    `given` at the floor is `100 x (1 - cost / unit_price)`; the returned figure is the
+    **line** discount that produces it once the order-level discount is compounded in, so
+    it is directly comparable to the number in the discount box.
+
+    Returns:
+        Decimal, rounded **down** so the figure quoted is never below the true floor, or
+        `None` when there is no floor to compute — a zero price, or a cost at or above the
+        price, in which case any discount at all is under water and the caller should say
+        so rather than print a negative percentage.
+    """
+    unit_price = Decimal(unit_price)
+    cost = Decimal(cost)
+    if unit_price <= 0 or cost >= unit_price:
+        return None
+
+    given_at_floor = HUNDRED * (ONE - (cost / unit_price))
+    floor = _line_discount_for_given(given_at_floor, order_discount_pct)
+    if floor is None or floor <= 0:
+        return None
+    return floor
+
+
+def routing_preview(quotation):
+    """What approval this quotation would attract **if it were submitted right now**.
+
+    The rep's screen otherwise only says a line is over its ceiling; it never says what
+    that costs them. Knowing before you submit that a discount buys a two-step chain is
+    what changes the discount — after the fact it only changes the paperwork.
+
+    Reads only, and routes through the same `approval.required_levels()` a real submit
+    uses, so the preview cannot promise one chain and the submit produce another.
+    """
+    from core.services import approval
+
+    result = score_for_quotation(quotation)
+    try:
+        requires_manager, requires_finance = approval.required_levels(result.score)
+    except Exception:
+        # A misconfigured chain must not take the builder down with it; the submit will
+        # still refuse loudly, which is where that error belongs.
+        return None
+
+    if requires_finance:
+        label = "Sales Manager, then Finance"
+    elif requires_manager:
+        label = "Sales Manager"
+    else:
+        label = "No approval needed"
+
+    return {
+        "score": result.score,
+        "label": label,
+        "requires_manager": requires_manager,
+        "requires_finance": requires_finance,
+        "flagged": result.flagged,
+    }
