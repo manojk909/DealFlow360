@@ -1,8 +1,8 @@
 {% extends "core/base.html" %}
 
-{# The internal rep workspace. Deliberately its own chrome: a bright tab strip, wide
+{% comment %} The internal rep workspace. Deliberately its own chrome: a bright tab strip, wide
    content, card surfaces. It must not be mistakable for the Django admin, which is the
-   backend *configuration* area and looks nothing like this. #}
+   backend *configuration* area and looks nothing like this. {% endcomment %}
 
 {% block main_class %}mx-auto max-w-7xl px-4 py-6{% endblock %}
 
@@ -35,8 +35,8 @@
       Invoices
     </a>
 
-    {# Named in the mockup, not built yet. Shown greyed rather than hidden: an absent
-       feature honestly labelled costs less than one quietly missing. #}
+    {% comment %} Named in the mockup, not built yet. Shown greyed rather than hidden: an absent
+       feature honestly labelled costs less than one quietly missing. {% endcomment %}
     {% for label, task in unbuilt %}
       <span class="cursor-not-allowed px-3 py-2.5 text-sm text-sky-300/50"
             title="Not built yet — {{ task }}">{{ label }}</span>

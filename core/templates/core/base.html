@@ -9,8 +9,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
 
-  {# Minimal fallback so the app is still legible if the CDN is unreachable.
-     Odoo's guidance is to plan for offline operation; see the note in tasks/BACKLOG.md. #}
+  {% comment %} Minimal fallback so the app is still legible if the CDN is unreachable.
+     Odoo's guidance is to plan for offline operation; see the note in tasks/BACKLOG.md. {% endcomment %}
   <style>
     :root { color-scheme: dark; }
     body { background:#0b1120; color:#e2e8f0;

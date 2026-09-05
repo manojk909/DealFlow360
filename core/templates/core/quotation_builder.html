@@ -2,8 +2,8 @@
 {% block title %}{{ quotation.number }} &middot; DealFlow360{% endblock %}
 
 {% block content %}
-{# hx-headers here rather than on each control: htmx inherits it, and the CSRF token
-   must survive every partial swap below. #}
+{% comment %} hx-headers here rather than on each control: htmx inherits it, and the CSRF token
+   must survive every partial swap below. {% endcomment %}
 <div hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 
   <div class="flex flex-wrap items-start justify-between gap-3">

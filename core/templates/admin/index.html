@@ -1,8 +1,8 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
-{# Replaces Django's flat alphabetical model list with the sections defined in
-   core/admin_site.py. The sidebar still uses Django's own app_list.html, untouched. #}
+{% comment %} Replaces Django's flat alphabetical model list with the sections defined in
+   core/admin_site.py. The sidebar still uses Django's own app_list.html, untouched. {% endcomment %}
 
 {% block coltype %}{% endblock %}
 {% block bodyclass %}{{ block.super }} dashboard{% endblock %}

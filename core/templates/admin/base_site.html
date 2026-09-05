@@ -1,8 +1,8 @@
 {% extends "admin/base.html" %}
 {% load static %}
 
-{# Branding and the DealFlow360 theme. The theme file only overrides Django's own CSS
-   custom properties, so there is no forked stylesheet to keep in sync on upgrade. #}
+{% comment %} Branding and the DealFlow360 theme. The theme file only overrides Django's own CSS
+   custom properties, so there is no forked stylesheet to keep in sync on upgrade. {% endcomment %}
 
 {% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | DealFlow360{% endblock %}
 
