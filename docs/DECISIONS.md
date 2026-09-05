@@ -548,6 +548,58 @@ more than it is worth today.
 
 ---
 
+---
+
+## ADR-012 — Self-signup creates a Sales Rep, and only a Sales Rep
+
+**Status:** Accepted
+**Date:** 2026-09-05
+
+**Context.** PDF A1 and SPEC.md FR-01 require internal users to be able to sign up. AC-1
+opens with "sign up or log in". But **nothing in the problem statement says a user chooses
+their own role**, and the four roles are not equal: Manager and Finance can approve
+discounts, and Admin can edit the ceilings and approval bands that decide when approval is
+needed at all.
+
+A signup form with a role dropdown would let an anonymous visitor grant themselves the
+power to approve their own discounts. That is not a security nicety — it would defeat the
+premise of the entire product, whose thesis is that pricing discipline is enforced by
+somebody other than the person giving the discount away. A judge who typed `MANAGER` into
+that dropdown would have disproved the demo in ten seconds.
+
+**Decision.** **Self-signup creates a `REP` and nothing else.**
+
+- The signup form has no role field, and `SignupForm.Meta.fields` is `("email", "name")`,
+  so Django never binds `role` from POST data. A crafted request carrying `role=MANAGER`
+  has nothing to bind to.
+- `SignupForm.save()` sets `role = REP`, `is_staff = False` and `is_superuser = False`
+  **explicitly**, rather than relying on the model's default — so the guarantee does not
+  quietly depend on a default that somebody could change later for an unrelated reason.
+- Manager, Finance and Admin are assigned by an administrator through Django admin, which
+  is already the backend configuration area.
+- The signup page says all of this in plain words, so it reads as a deliberate policy
+  rather than a missing feature.
+
+**Reason.** It is the smallest rule that satisfies FR-01 without contradicting BR-2. It is
+also the conventional answer: almost no real sales system lets a stranger self-select into
+an approver role. Granting privilege is an administrative act, and this application already
+has an administrative surface to do it in.
+
+**Rejected: a role dropdown with an "approval pending" flag.** More faithful to the idea
+that someone might legitimately sign up as a manager, but it needs an approval queue for
+account creation, which is a second governance system nobody asked for, on a 24-hour build.
+
+**Consequences.**
+- AC-1's "sign up" branch is genuinely satisfied and demonstrable.
+- A new signup cannot reach `/workspace/approvals/` — the existing role check returns 403,
+  and a test asserts a signup attempting `role=MANAGER` still lands as a REP.
+- Seeded demo accounts are unaffected; `seed_demo` sets roles directly, which is the
+  administrative path, not the signup path.
+- There is no password reset and no email verification. Neither is required by any
+  acceptance criterion and both need mail infrastructure that ADR-004 already declined.
+
+---
+
 ## Cross-document consistency check — 2026-09-05
 
 Run after all documents were created (Step 12).

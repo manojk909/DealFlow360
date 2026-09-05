@@ -12,6 +12,7 @@ over a JSON API plus a client renderer (ADR-001).
 from decimal import Decimal, InvalidOperation
 from functools import wraps
 
+from django.contrib.auth import login as auth_login
 from django.contrib.auth.decorators import login_required
 from django.db import connection
 from django.db.migrations.recorder import MigrationRecorder
@@ -32,6 +33,7 @@ from core.models import (
     Stock,
     User,
 )
+from core.forms import SignupForm
 from core.services import approval, billing, fulfilment, negotiation, pricing, risk, upsell
 
 
@@ -66,6 +68,31 @@ def health(request):
         "auth_user_model": f"{User._meta.app_label}.{User.__name__}",
     }
     return render(request, "core/health.html", context)
+
+
+# --------------------------------------------------------------------- signup
+
+
+def signup(request):
+    """FR-01. Self-service signup, which creates a **Sales Rep** and only a Sales Rep.
+
+    The form has no role field and `SignupForm.Meta.fields` excludes it, so a POST
+    carrying `role=MANAGER` is not merely ignored — there is nothing for it to bind to.
+    ADR-012 records why: a visitor who could grant themselves approval rights would defeat
+    the premise of a product built to stop reps approving their own discounts.
+
+    Manager, Finance and Admin are assigned by an administrator in Django admin.
+    """
+    if request.user.is_authenticated:
+        return redirect("core:quotation_list")
+
+    form = SignupForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        user = form.save()
+        auth_login(request, user)
+        return redirect("core:quotation_list")
+
+    return render(request, "core/signup.html", {"form": form})
 
 
 # --------------------------------------------------------------------- authorisation

@@ -48,6 +48,11 @@ If SPEC.md and the PDF disagree, the PDF wins — and fix SPEC.md in the same ch
   not at all. Every approval, rejection, edit and portal action writes an audit row.
 - Use existing project conventions. Match the file layout, naming and patterns already in
   the repo rather than introducing a second style.
+- **Never write a markdown or documentation file through an inline shell string.**
+  Backticks inside it are command-substituted by the shell and their contents silently
+  vanish, leaving prose with holes in it where the identifiers used to be. This has cost
+  two round trips already. Use the Write tool, or a heredoc with a **quoted** delimiter
+  (`<<'EOF'`), or a Python script file.
 - Update tests when behaviour changes.
 - Verify before marking a task complete. "It compiles" is not verification.
 

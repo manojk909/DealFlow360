@@ -1,0 +1,45 @@
+{% extends "core/base.html" %}
+{% block title %}Create an account &middot; DealFlow360{% endblock %}
+
+{% block content %}
+<div class="mx-auto mt-10 max-w-sm">
+  <h1 class="text-xl font-semibold text-slate-100">Create an account</h1>
+  <p class="mt-1 text-sm text-slate-400">
+    New accounts are created as <strong class="text-slate-200">Sales Rep</strong>.
+    Manager, Finance and Admin access is granted by an administrator &mdash; nobody
+    assigns themselves approval rights.
+  </p>
+
+  {% if form.non_field_errors %}
+    <p class="mt-4 rounded border border-rose-800 bg-rose-950/60 px-3 py-2 text-sm text-rose-200">
+      {{ form.non_field_errors|join:" " }}
+    </p>
+  {% endif %}
+
+  <form method="post" class="mt-6 space-y-4" novalidate>
+    {% csrf_token %}
+    {% for field in form %}
+      <div>
+        <label for="{{ field.id_for_label }}" class="block text-xs uppercase tracking-wide text-slate-500">
+          {{ field.label }}
+        </label>
+        {{ field }}
+        {% if field.help_text %}
+          <p class="mt-1 text-xs text-slate-600">{{ field.help_text|safe }}</p>
+        {% endif %}
+        {% for error in field.errors %}
+          <p class="mt-1 text-xs text-rose-400">{{ error }}</p>
+        {% endfor %}
+      </div>
+    {% endfor %}
+    <button type="submit" class="w-full rounded bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-500">
+      Create account
+    </button>
+  </form>
+
+  <p class="mt-6 text-sm text-slate-500">
+    Already have an account?
+    <a href="{% url 'core:login' %}" class="text-sky-400 no-underline hover:text-sky-300">Sign in</a>
+  </p>
+</div>
+{% endblock %}
