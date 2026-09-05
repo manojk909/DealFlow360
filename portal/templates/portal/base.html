@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Your quotation{% endblock %}</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  {% comment %}
+    Deliberately a LIGHT theme, and deliberately not extending core/templates/core/base.html.
+    The internal workspace is dark with a blue tab strip; this shares no chrome with it at
+    all. PDF §7 requires the customer surface to be genuinely separate rather than an
+    internal screen relabelled, and a customer should never wonder whether they are looking
+    at someone's back office.
+  {% endcomment %}
+  <style>
+    :root { color-scheme: light; }
+    body { background:#f8fafc; color:#0f172a;
+           font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif; }
+  </style>
+</head>
+<body class="min-h-full bg-slate-50 text-slate-900 antialiased">
+
+  <header class="border-b border-slate-200 bg-white">
+    <div class="mx-auto flex max-w-3xl items-center justify-between px-5 py-4">
+      <div>
+        <div class="text-base font-semibold tracking-tight text-slate-900">
+          {{ quotation.customer.name }}
+        </div>
+        <div class="text-xs text-slate-500">Quotation {{ quotation.number }}</div>
+      </div>
+      <div class="text-right text-xs text-slate-400">
+        Prepared by {{ quotation.rep.name }}
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-3xl px-5 py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="mx-auto max-w-3xl px-5 pb-10 text-xs text-slate-400">
+    This link is private to your quotation. Please do not share it.
+  </footer>
+
+</body>
+</html>

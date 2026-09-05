@@ -27,6 +27,8 @@ the demo script one approval short.
 
 from decimal import Decimal
 
+from django.core import signing
+
 
 class PortalAccessDenied(Exception):
     """The token is missing, malformed, unsigned, tampered with, or unknown.
@@ -53,7 +55,28 @@ def resolve_token(token):
     Raises:
         PortalAccessDenied: for every failure mode.
     """
-    raise NotImplementedError("T-14 — portal access and restricted view")
+    from core.models import Quotation
+
+    if not token:
+        raise PortalAccessDenied("No token supplied.")
+
+    try:
+        # No max_age: ADR-004 records that these links deliberately do not expire.
+        quotation_id = signing.TimestampSigner().unsign(token)
+    except signing.BadSignature as exc:
+        raise PortalAccessDenied("Token signature is not valid.") from exc
+
+    quotation = Quotation.objects.filter(pk=quotation_id).first()
+    if quotation is None:
+        raise PortalAccessDenied("No such quotation.")
+
+    # Defence in depth. The signature already binds the token to one quotation id, but
+    # this also refuses a token that was rotated or never issued for this quotation —
+    # one token, one quotation, checked twice (invariant 12).
+    if not quotation.portal_token or quotation.portal_token != token:
+        raise PortalAccessDenied("Token is not the one issued for this quotation.")
+
+    return quotation
 
 
 def portal_status(quotation):
@@ -72,7 +95,21 @@ def portal_status(quotation):
     Returns:
         One of the four strings above.
     """
-    raise NotImplementedError("T-14 — portal access and restricted view")
+    from core.models import Quotation
+
+    stage = getattr(quotation, "stage", quotation)
+    return {
+        Quotation.Stage.DRAFT: "Draft",
+        Quotation.Stage.SENT: "Sent",
+        Quotation.Stage.UNDER_NEGOTIATION: "Under Negotiation",
+        Quotation.Stage.PENDING_APPROVAL: "Under Negotiation",
+        Quotation.Stage.APPROVED: "Under Negotiation",
+        Quotation.Stage.CONFIRMED: "Confirmed",
+        Quotation.Stage.FULFILLED: "Confirmed",
+        Quotation.Stage.INVOICED: "Confirmed",
+        Quotation.Stage.PAID: "Confirmed",
+        Quotation.Stage.REJECTED: "Closed",
+    }.get(stage, "Draft")
 
 
 def portal_link(quotation, request=None):
@@ -82,7 +119,14 @@ def portal_link(quotation, request=None):
     closed that sub-question, because SMTP is a live network dependency in the middle of
     a demo and no acceptance criterion asks for it.
     """
-    raise NotImplementedError("T-14 — portal access and restricted view")
+    from django.urls import reverse
+
+    if not quotation.portal_token:
+        quotation.portal_token = signing.TimestampSigner().sign(str(quotation.pk))
+        quotation.save(update_fields=["portal_token"])
+
+    path = reverse("portal:quotation", args=[quotation.portal_token])
+    return request.build_absolute_uri(path) if request is not None else path
 
 
 def add_comment(quotation, body, line=None):
