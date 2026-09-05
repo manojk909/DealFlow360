@@ -851,3 +851,55 @@ spreadsheet is ambiguous and a code is not.
 
 ---
 
+---
+
+## ADR-015 — Amendments: changing what is already owned
+
+**Status:** Accepted
+**Date:** 2026-09-06
+
+**Context.** ADR-013 gave the system assets, so it knows what a customer owns and can renew
+it when the term ends. What it could not do is change an asset **mid-term**. Salesforce
+Revenue Cloud treats "Amendments, Renewals and Cancellations" as one first-class flow, and
+Odoo does it through subscription upsell. Selling ten more seats in month four is the most
+common change a subscription business makes, and without it the only way to record one was
+to raise a second contract — which restarts the term, bills a full period, and leaves the
+customer holding two overlapping agreements for the same product.
+
+**Decision.** **An amendment is a quotation with `kind=AMENDMENT` that references an asset
+and edits it, rather than creating a second one.**
+
+Three properties define it, and all three are asserted in `core/tests/test_amendments.py`:
+
+1. **Co-terming.** `end_date` is not touched. The customer's term does not restart because
+   they bought more seats. This is the property that makes it an amendment rather than a
+   new sale wearing the word.
+2. **Proration on the days remaining.** The original line's quantity changes and
+   `billing.prorate_quantity_change()` — already built and tested under ADR-008 — writes
+   the adjustment for the part of the period still to run, then rewrites every future
+   entry at the new quantity. Amending on the *first* day of a period correctly charges
+   that period in full, because nothing has elapsed; that boundary is asserted rather than
+   left as a surprise.
+3. **No second schedule and no second asset.** The original line owns the billing
+   schedule. The amendment's own line is paperwork and is never billed.
+
+**Governance still applies.** `create_amendment_quotation()` raises a *draft*. Nothing
+moves until the quotation is confirmed, so an amendment routes through the same blended
+risk score and approval chain as any other deal. A rep cannot change what a customer owns
+by filling in a form — which would have made the whole governance story hollow.
+
+**Reason.** It reuses two things that already existed and were already correct: the asset
+spine from ADR-013 and the daily pro-rata rule from ADR-008. The work was a `kind` field, a
+foreign key, and a branch in the confirmation hook. Building a separate amendment subsystem
+would have duplicated the proration maths, and duplicated money arithmetic is how two
+screens end up disagreeing about what a customer owes.
+
+**Consequences.** `billing.on_order_confirmed()` now branches on `Quotation.kind`. That
+function is the hot path for both Flow A and Flow B, so the branch is asserted in both
+directions: an amendment must not create assets or a schedule, and an ordinary order must
+behave exactly as it did before. `Quotation.kind` also distinguishes renewals, which
+previously looked like new business in every report.
+
+**Still not built:** amending the *plan* rather than the quantity (monthly to annual), and
+amending several assets in one quotation. Both are recorded in NEXT.md.
+

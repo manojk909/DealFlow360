@@ -424,6 +424,17 @@ def quotation_builder(request, pk):
         (category, list(category.products.filter(active=True).order_by("name")))
         for category in Category.objects.order_by("name")
     ]
+    # ADR-015. On an amendment the arithmetic is the point: what is being changed, what it
+    # costs for the days left, and the fact that the end date does not move.
+    context["amendment"] = (
+        assets.amendment_preview(
+            quotation.amends_asset, quotation.lines.first().qty
+        )
+        if quotation.kind == Quotation.Kind.AMENDMENT
+        and quotation.amends_asset
+        and quotation.lines.exists()
+        else None
+    )
     context["portal_url"] = (
         negotiation.portal_link(quotation, request) if quotation.portal_token else None
     )
@@ -1519,4 +1530,22 @@ def renewal_create(request, pk):
         return redirect("core:renewal_list")
 
     quotation = assets.create_renewal_quotation(due, request.user)
+    return redirect("core:quotation_builder", pk=quotation.pk)
+
+
+# ------------------------------------------------------------- T-42 amendments (ADR-015)
+
+
+@require_POST
+@login_required
+def amendment_create(request, pk):
+    """Raise a draft amendment against one asset. Governance still applies afterwards."""
+    asset = get_object_or_404(Asset.objects.select_related("customer", "product"), pk=pk)
+    try:
+        new_qty = int(_decimal(request.POST.get("qty", ""), "Quantity", minimum=Decimal("1")))
+        quotation = assets.create_amendment_quotation(asset, new_qty, request.user)
+    except ValueError as exc:
+        return redirect(
+            f"/workspace/customers/{asset.customer_id}/?error={quote(str(exc))}"
+        )
     return redirect("core:quotation_builder", pk=quotation.pk)

@@ -686,6 +686,22 @@ class Command(BaseCommand):
         ):
             asset_service.create_from_confirmation(quotation)
 
+        # Age the billing schedules so periods are part-elapsed. Without this every
+        # schedule starts today, so an amendment raised on the demo machine finds a full
+        # period remaining and charges it in full — arithmetically correct, and useless as
+        # a demonstration of proration. Backdating puts the customer mid-period, which is
+        # where a real amendment happens.
+        from core.models import BillingScheduleEntry
+
+        elapsed = [11, 18, 6, 23]
+        for index, line_id in enumerate(
+            BillingScheduleEntry.objects.values_list("quotation_line", flat=True).distinct()
+        ):
+            shift = timedelta(days=elapsed[index % len(elapsed)])
+            for entry in BillingScheduleEntry.objects.filter(quotation_line_id=line_id):
+                entry.due_date = entry.due_date - shift
+                entry.save(update_fields=["due_date"])
+
         # Stagger the terms: two already lapsed, the rest inside 20 to 200 days.
         offsets = [-18, -4, 12, 26, 45, 70, 110, 160, 200]
         recurring = list(

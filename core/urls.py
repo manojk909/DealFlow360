@@ -56,6 +56,7 @@ urlpatterns = [
     # T-41 — customers, assets and renewals (ADR-013)
     path("workspace/customers/", views.customer_list, name="customer_list"),
     path("workspace/customers/<int:pk>/", views.customer_detail, name="customer_detail"),
+    path("workspace/assets/<int:pk>/amend/", views.amendment_create, name="amendment_create"),
     path("workspace/renewals/", views.renewal_list, name="renewal_list"),
     path("workspace/renewals/<int:pk>/create/", views.renewal_create, name="renewal_create"),
 

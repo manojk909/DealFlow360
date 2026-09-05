@@ -131,11 +131,12 @@ acceptance criterion, and both need the mail infrastructure above.
 
 ## Still not built, and why
 
-**Amendments and co-terming.** ADR-013 added assets, so the system now knows what a customer
-owns and can renew it. What it cannot do is *change* an asset mid-term — add ten seats in
-month four and co-term them to the existing end date. Salesforce Revenue Cloud treats this
-as a first-class flow, and it is the single biggest remaining gap. It needs an amendment
-quotation type that references an asset rather than creating one.
+**Plan changes, and multi-asset amendments.** ADR-015 shipped quantity amendments —
+co-termed, prorated on the days remaining, and routed through approval like any other deal.
+Two things it deliberately does not cover: moving a contract from monthly to annual, which
+is a question about what happens to the periods already scheduled and at what price the
+remainder rebuilds; and amending several assets in one quotation, which needs the amendment
+to reference a set rather than a single asset.
 
 **Churn and cohort analytics.** Odoo Subscriptions reports new, churned, expansion, down and
 net-new MRR, plus cohort retention. Every input now exists on the asset table; what is

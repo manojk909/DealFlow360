@@ -113,7 +113,31 @@ class Quotation(models.Model):
         INVOICED = "INVOICED", "Invoiced"
         PAID = "PAID", "Paid"
 
+    class Kind(models.TextChoices):
+        """Why this quotation exists. ADR-015.
+
+        A NEW quotation sells something the customer does not have. A RENEWAL replaces a
+        term that is ending. An AMENDMENT changes something they already own *mid-term* —
+        and that is the one with teeth, because the change must be co-termed to the
+        existing end date and charged only for the days left in the current period.
+        """
+
+        NEW = "NEW", "New business"
+        RENEWAL = "RENEWAL", "Renewal"
+        AMENDMENT = "AMENDMENT", "Amendment"
+
     number = models.CharField(max_length=40, unique=True)
+    kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.NEW)
+    # Set only on an AMENDMENT: the asset being changed. The amendment does not create a
+    # new asset — it edits this one, which is what makes it an amendment rather than a
+    # second contract sitting alongside the first.
+    amends_asset = models.ForeignKey(
+        "core.Asset",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="amendments",
+    )
     customer = models.ForeignKey(
         "core.Customer", on_delete=models.PROTECT, related_name="quotations"
     )

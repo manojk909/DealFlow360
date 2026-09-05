@@ -17,7 +17,7 @@ Built for the Odoo Hackathon 2026 by **Team 317** (solo build).
 ## Status
 
 **Feature complete against the problem statement.** Every module in PDF §4 (A1–A7, B1–B9)
-is built, and all eight steps of the §9 quick test flow run end to end. **257 tests pass.**
+is built, and all eight steps of the §9 quick test flow run end to end. **281 tests pass.**
 
 | PDF module | Where it lives |
 |---|---|
@@ -39,6 +39,7 @@ is built, and all eight steps of the §9 quick test flow run end to end. **257 t
 | B9 Deal health | Stalled deals, discount anomalies, delivery slippage, nudge |
 | Profile | Overview, activity, access and preferences per signed-in user |
 | Customers & assets | What each account owns, MRR/ARR, and a one-click renewal queue (ADR-013) |
+| Amendments | Change a live contract mid-term — co-termed, prorated, approval-routed (ADR-015) |
 
 Not built, and deliberately so: multi-currency and multi-company (PDF §7 marks both a
 bonus), and subscription *plan* changes as distinct from quantity changes. See

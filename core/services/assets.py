@@ -180,6 +180,7 @@ def create_renewal_quotation(assets, rep):
         customer=customer,
         rep=rep,
         stage=Quotation.Stage.DRAFT,
+        kind=Quotation.Kind.RENEWAL,
         last_activity_at=timezone.now(),
     )
 
@@ -228,3 +229,162 @@ def expire_lapsed(as_of=None):
     return Asset.objects.filter(
         status=Asset.Status.ACTIVE, end_date__lt=as_of, renewed_into__isnull=True
     ).update(status=Asset.Status.EXPIRED)
+
+
+# ------------------------------------------------------------------ amendments (ADR-015)
+
+
+@transaction.atomic
+def create_amendment_quotation(asset, new_qty, rep):
+    """Raise a draft amendment that changes the quantity of something already owned.
+
+    An amendment is not a second contract. It edits the asset in place, keeps the existing
+    end date — **co-terming** — and charges only for the days remaining in the current
+    billing period. Selling ten more seats in month four should not restart the customer's
+    term or bill them for a period they are already halfway through.
+
+    Nothing is applied here. This raises the paperwork; `apply_amendment()` runs on
+    confirmation, so an amendment goes through the same approval governance as any other
+    quotation. A rep cannot change what a customer owns by filling in a form.
+
+    Raises:
+        ValueError: if the asset is not an active recurring contract, or the quantity is
+            unchanged or below one.
+    """
+    from core.models import Quotation, QuotationLine
+    from core.services import approval, pricing
+
+    if asset.status != asset.Status.ACTIVE:
+        raise ValueError("Only an active contract can be amended.")
+    if not asset.is_recurring:
+        raise ValueError(
+            "Only a recurring contract can be amended. A one-time purchase is not a term."
+        )
+    if new_qty < 1:
+        raise ValueError("Quantity must be at least 1.")
+    if new_qty == asset.qty:
+        raise ValueError("That is the quantity they already have.")
+
+    today = timezone.localdate()
+    quotation = Quotation.objects.create(
+        number=f"Q-{today.year}-A{Quotation.objects.count() + 1:04d}",
+        customer=asset.customer,
+        rep=rep,
+        stage=Quotation.Stage.DRAFT,
+        kind=Quotation.Kind.AMENDMENT,
+        amends_asset=asset,
+        last_activity_at=timezone.now(),
+    )
+    product = asset.product
+    QuotationLine.objects.create(
+        quotation=quotation,
+        product=product,
+        qty=new_qty,
+        unit_price=pricing.resolve_unit_price(product, asset.customer),
+        discount_pct=Decimal("0"),
+        line_type=QuotationLine.LineType.RECURRING,
+        subscription_plan=product.subscription_plan,
+    )
+    pricing.recompute_quotation(quotation)
+
+    direction = "increase" if new_qty > asset.qty else "reduction"
+    approval.record(
+        quotation,
+        action="AMENDMENT_RAISED",
+        actor=rep,
+        reason=(
+            f"Amendment to {product.name} for {asset.customer.name}: {direction} from "
+            f"{asset.qty} to {new_qty}, co-termed to {asset.end_date}. Prorated on "
+            f"confirmation for the days left in the current period."
+        ),
+    )
+    return quotation
+
+
+def amendment_preview(asset, new_qty, as_of=None):
+    """What the amendment will cost, before anybody commits to it. Reads only.
+
+    Shown on the amendment quotation so the rep and the approver see the same arithmetic
+    the service will perform: how many days remain, what the prorated charge is, and what
+    the contract bills from the next period onward.
+    """
+    from core.services import billing
+
+    as_of = as_of or timezone.localdate()
+    line = asset.source_line
+    period_start, period_end = billing.current_period(line, as_of)
+    days_in_period = (period_end - period_start).days
+    days_remaining = max(0, (period_end - as_of).days)
+
+    unit_period_price = (Decimal(line.line_total) / Decimal(asset.qty)).quantize(
+        Decimal("0.01")
+    )
+    delta = Decimal(new_qty - asset.qty)
+    prorated = (
+        (unit_period_price * delta * Decimal(days_remaining) / Decimal(days_in_period))
+        .quantize(Decimal("0.01"))
+        if days_in_period
+        else Decimal("0.00")
+    )
+    return {
+        "asset": asset,
+        "current_qty": asset.qty,
+        "new_qty": new_qty,
+        "period_start": period_start,
+        "period_end": period_end,
+        "days_in_period": days_in_period,
+        "days_remaining": days_remaining,
+        "unit_period_price": unit_period_price,
+        "prorated_now": prorated,
+        "next_period_amount": (unit_period_price * Decimal(new_qty)).quantize(Decimal("0.01")),
+        "co_term_date": asset.end_date,
+    }
+
+
+@transaction.atomic
+def apply_amendment(quotation):
+    """Apply a confirmed amendment to the asset it references. Idempotent.
+
+    Three things happen, and the order matters:
+
+    1. The **original** line's quantity changes, and `billing.prorate_quantity_change()`
+       writes the adjustment for the days remaining and rewrites every future scheduled
+       entry at the new quantity. The original line owns the billing schedule, so the
+       amendment's own line is paperwork — it is never billed.
+    2. The asset's quantity and MRR follow the line.
+    3. **`end_date` is not touched.** That is the co-term, and it is the whole point: the
+       customer's term does not restart because they bought more seats.
+    """
+    from core.models import Quotation
+    from core.services import approval, billing
+
+    asset = quotation.amends_asset
+    if quotation.kind != Quotation.Kind.AMENDMENT or asset is None:
+        return None
+    if quotation.audit_log.filter(action="AMENDMENT_APPLIED").exists():
+        return None  # already applied; both confirmation paths reach this hook
+
+    new_qty = quotation.lines.first().qty
+    previous_qty = asset.qty
+
+    entry = billing.prorate_quantity_change(asset.source_line, new_qty)
+    asset.source_line.refresh_from_db()
+    asset.qty = new_qty
+    asset.mrr = monthly_value(asset.source_line)
+    asset.save(update_fields=["qty", "mrr"])
+
+    approval.record(
+        quotation,
+        action="AMENDMENT_APPLIED",
+        reason=(
+            f"{asset.product.name} moved from {previous_qty} to {new_qty} for "
+            f"{asset.customer.name}. Term unchanged \u2014 still ends {asset.end_date}. "
+            + (
+                f"Prorated adjustment of {entry.amount} for the days remaining."
+                if entry
+                else "No days remained in the period, so nothing was prorated."
+            )
+        ),
+    )
+    return entry
+

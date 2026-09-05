@@ -35,6 +35,12 @@
   </div>
 </div>
 
+{% if request.GET.error %}
+  <p class="mt-4 rounded-lg border border-rose-800 bg-rose-950/60 px-3 py-2 text-sm text-rose-200">
+    {{ request.GET.error }}
+  </p>
+{% endif %}
+
 <section class="mt-6">
   <h2 class="text-xs font-semibold uppercase tracking-widest text-slate-400">What they own</h2>
   <p class="mt-0.5 text-xs text-slate-500">
@@ -49,6 +55,7 @@
           <th class="px-4 py-2.5">From</th><th class="px-4 py-2.5">Term ends</th>
           <th class="px-4 py-2.5 text-right">MRR</th><th class="px-4 py-2.5">Status</th>
           <th class="px-4 py-2.5">Origin</th>
+          <th class="px-4 py-2.5 text-right">Amend</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-800 bg-slate-900">
@@ -75,9 +82,26 @@
               <a href="{% url 'core:quotation_builder' asset.quotation.pk %}"
                  class="text-xs text-sky-400 no-underline hover:underline">{{ asset.quotation.number }}</a>
             </td>
+            <td class="px-4 py-2.5 text-right">
+              {% comment %} ADR-015. Amending is raising a quotation, not editing a row —
+                 so the change goes through the same approval governance as any deal. {% endcomment %}
+              {% if asset.status == 'ACTIVE' and asset.end_date %}
+                <form method="post" action="{% url 'core:amendment_create' asset.pk %}"
+                      class="inline-flex items-center gap-1">
+                  {% csrf_token %}
+                  <input type="number" name="qty" min="1" value="{{ asset.qty }}"
+                         class="w-16 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-right text-xs tabular-nums text-slate-100">
+                  <button type="submit"
+                          class="rounded border border-violet-700 px-2 py-1 text-xs text-violet-300 hover:bg-violet-950"
+                          title="Change quantity mid-term, co-termed to the existing end date">
+                    Amend
+                  </button>
+                </form>
+              {% endif %}
+            </td>
           </tr>
         {% empty %}
-          <tr><td colspan="7" class="px-4 py-10 text-center text-slate-600">
+          <tr><td colspan="8" class="px-4 py-10 text-center text-slate-600">
             Nothing owned yet &mdash; assets appear when an order is confirmed.
           </td></tr>
         {% endfor %}

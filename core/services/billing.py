@@ -312,6 +312,14 @@ def on_order_confirmed(quotation, periods=12):
 
     from core.services import assets
 
+    from core.models import Quotation
+
+    # ADR-015. An amendment changes something the customer already owns: it must not build
+    # a second schedule or a second asset, so it branches before either of those runs.
+    if quotation.kind == Quotation.Kind.AMENDMENT:
+        assets.apply_amendment(quotation)
+        return []
+
     schedule = build_billing_schedule(quotation, periods=periods)
     # ADR-013. What the customer now owns, from the same hook, so an asset cannot exist
     # for an order nobody confirmed.
