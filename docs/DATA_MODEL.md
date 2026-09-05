@@ -98,17 +98,31 @@ Configuration, not code — CLAUDE.md forbids hardcoding these thresholds.
 `created_at`, `last_activity_at`.
 `last_activity_at` drives the stalled-deal detector (BR-8).
 
-**Stage lifecycle:**
+**Stage lifecycle** — settled by ADR-010, which is the authority if this sketch and the
+ADR ever disagree:
 ```
-DRAFT → PENDING_APPROVAL → APPROVED → CONFIRMED → FULFILLED → INVOICED → PAID
-  │            │  ▲                        ▲
-  │            │  └────────────────────────┘  portal counter-offer re-entry (BR-6)
-  │            └─► REJECTED
-  └─► SENT → UNDER_NEGOTIATION → (back to PENDING_APPROVAL or straight to CONFIRMED)
+DRAFT ──score == 0──────────────────────────────┐
+  │                                             ▼
+  └─score > 0─► PENDING_APPROVAL ──all steps OK──► APPROVED ──► CONFIRMED ──► FULFILLED
+                   │      ▲                          │            ▲              │
+     step REJECTED │      │ counter-offer re-entry   ▼            │              ▼
+                   ▼      │ past threshold (BR-6)   SENT ─────────┤          INVOICED
+                REJECTED  │                          │            │              │
+                (terminal)│                          ▼            │              ▼
+                          └────────────── UNDER_NEGOTIATION ──────┘            PAID
+  ▲
+  └── step RETURNED (return for revision) sends the quotation back to DRAFT
 ```
-`SENT`, `UNDER_NEGOTIATION`, `CONFIRMED` are the three portal-visible statuses named in
-PDF B8. **DECISION NEEDED:** whether `SENT` is a distinct stage or a flag on `APPROVED`
-(ADR-010).
+An earlier version of this diagram showed a `DRAFT → SENT` edge. **It was wrong and has
+been removed.** `SENT` is reachable only from `APPROVED`; letting a rep send a portal link
+straight out of `DRAFT` would let them route around governance entirely, which breaks
+invariants 2 and 5 and defeats the point of the product.
+
+`SENT`, `UNDER_NEGOTIATION` and `CONFIRMED` are the three portal-visible statuses named in
+PDF B8. Per ADR-010, `SENT` is a distinct stage rather than a flag on `APPROVED`, `REJECTED`
+is terminal, return-for-revision is a separate `ApprovalStep.status = RETURNED` that sends
+the quotation back to `DRAFT`, and what the customer sees in the portal is a display mapping
+over `stage` rather than a second stored field.
 
 ### QuotationLine
 `id`, `quotation_id`, `product_id`, `variant_id` (nullable), `qty`, `unit_price`,

@@ -75,15 +75,74 @@ Next task: **T-01 — project scaffold and database connection.**
 
 ---
 
-## Round 2 — *(to be filled in)*
+## Round 2 — Scaffold up, blocking decisions closed
 
-**What landed since last round:**
+*Logged 05 Sep 2026*
 
-**Currently building:**
+**What landed since last round.**
 
-**Blocked on / open decisions:**
+The application now runs. Django 5.2 on SQLite, with a custom `User` model carrying the
+four roles — Rep, Manager, Finance, Admin — and a `/health/` page whose every value is read
+from the database on each request, so the round trip from URL to ORM to SQLite to template
+is proved rather than asserted. The Django admin is up and registers the user model with
+its role. We verified it the way it will actually be used: cloned the repository into a
+clean directory, followed only the README, and had the app serving from a fresh database.
 
-**Risks:**
+Alongside that we closed the four architectural decisions that were blocking the critical
+path. These were the places where the problem statement genuinely does not specify an
+answer, and we had deliberately left them open rather than guessing early.
+
+- **The blended discount risk score.** The score is the total number of discount percentage
+  points given away above ceiling across the quotation, where each line is measured against
+  the stricter of its customer tier's ceiling and its category's. One badly-over line flags
+  on its own; several slightly-over lines add up until they flag too. Both of the problem
+  statement's worked examples reproduce exactly — the 18% service line against a 10% ceiling
+  scores 8, and the 2 + 3 + 2 case scores 7.
+- **The warehouse split.** Fill each line from the cheapest warehouse first and spill into
+  the next, except that a warehouse able to cover the line alone ships it alone; the
+  remainder becomes a backorder. We call it a heuristic in the architecture decision record
+  and on the screen, because that is what it is.
+- **Customer portal access.** A signed, quotation-scoped token in the URL. One token, one
+  quotation, enforced server-side; anything else is a 403. No customer accounts and no
+  email, so there is no live dependency during the demo.
+- **The quotation stage machine.** One stage field, ten stages. What the customer sees in
+  the portal is a display mapping over that field rather than a second field that can drift
+  out of step with it.
+
+**How we wrote the most important one.** The two worked examples from the problem statement
+were written as unit tests **before** the formula was chosen, and the tests say so in their
+own docstring: they are the specification, and the implementation is what has to change if
+they disagree. They sit in the repository now, skipping with an explicit reason that names
+the task that will make them pass.
+
+**Two contradictions we found in our own documents and fixed rather than papered over.**
+Our demo script had the customer countering at a discount that, under the routing rules we
+had just written, would have required two approvers while the script showed only one — the
+walkthrough would have stalled on stage. And our data model diagram allowed a rep to send a
+quotation to a customer straight out of Draft, which would have let them route around the
+approval chain entirely. Both are corrected, and both corrections are written down with the
+reasoning, because a silently patched document teaches nobody anything.
+
+**Currently building.** T-02, the full P0 schema, in one migration wave. Then T-03, the
+seed script — which is the highest-leverage task in the build, because every one of our four
+tracks needs data to work against.
+
+**Blocked on / open decisions.** Nothing on the critical path. Three decisions remain open
+by choice — the deal-health thresholds, the subscription proration basis, and the treatment
+of tax — and all three block only SHOULD-priority features. We will close them when their
+tasks come up rather than guessing now.
+
+**Risks.**
+
+- Only one machine has run the scaffold so far. All four of us need to clone and run it
+  before we build on it in parallel.
+- Tailwind and HTMX load from CDNs today. The venue network is a dependency we do not want
+  during a five-minute demo, so vendoring them locally is on the backlog ahead of the
+  rehearsal.
+- The risk score deliberately ignores line value — a percentage-point rule, because the
+  problem statement's examples are stated in percentage points with no prices at all. It is
+  the most likely question we will be asked about our core rule, and we would rather answer
+  it plainly than dress the formula up.
 
 ---
 

@@ -167,7 +167,9 @@ by shipping unused endpoints.
   PDF §7 — enforced server-side, not by hiding nav links.
 - Portal views must **not** be behind `login_required`, and must never touch
   `request.user` — a customer has no user account.
-- **DECISION NEEDED:** magic link vs portal email+password. PDF offers both. See ADR-004.
+- **Settled by ADR-004 (Accepted):** the signed quotation-scoped token above is the whole
+  mechanism. No customer accounts, no portal passwords, no expiry enforced. A bad or
+  tampered token returns 403.
 
 ## External integrations
 
@@ -175,9 +177,9 @@ None required. PDF §7 leaves the stack free and marks multi-currency and multi-
 bonuses. Odoo's guidance to "plan for offline or local solutions" argues against adding any
 hosted dependency — with Django + SQLite the whole app runs with no network at all.
 
-Email for sending the customer their portal link: **DECISION NEEDED** — Django's
-`console.EmailBackend` or simply a copyable link in the UI. A copyable link has no failure
-mode on stage. See ADR-004.
+Email for sending the customer their portal link: **settled by ADR-004 — no email is sent.**
+The rep copies the portal link from the internal quotation screen. Real SMTP is a live
+dependency during a demo and buys nothing that any acceptance criterion asks for.
 
 ## Major data flow — quotation to cash
 

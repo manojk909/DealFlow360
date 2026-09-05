@@ -2,94 +2,90 @@
 
 **Status: NOT STARTED**
 
-Nothing has been implemented yet. The repository contains documentation only.
-
-Stack is settled: **Django 5 + SQLite** (ADR-001, ADR-002, both Accepted).
+T-00 and T-01 are done — see `tasks/DONE.md`. The app runs, `AUTH_USER_MODEL` is set to
+`core.User` and was set before the first migration, and the four ADRs that blocked P0 are
+closed. **No P0 task is blocked by an open decision.**
 
 ---
 
-## T-01 — Project scaffold and database connection
+## T-02 — Schema and migrations for the P0 entities
 
 ### Objective
 
-Stand up a running Django project with a working SQLite connection and a custom user model,
-and prove it with a health page. Every other task is blocked on this.
+Turn DATA_MODEL.md's MUST entities into tables, in **one migration wave**, so all four
+tracks can start building against a real schema.
 
 ### Context
 
-`DealFlow360/` was empty before this documentation was written — no source, no manifest, no
-migrations, no tests. This is a greenfield start.
+T-01 shipped exactly one model — the custom `User` in `core/models/parties.py`. Everything
+else in DATA_MODEL.md is still just a document.
 
-**The one thing that must not be got wrong.** `AUTH_USER_MODEL` has to be set in
-`settings.py` *before the first migration runs*. Changing Django's user model after
-migrations exist means deleting the database and every migration and starting again. So
-create the `core` app and its custom `User` model **first**, then run `migrate` — never the
-other way round. This is the single most expensive mistake available in this task.
+**The coordination rule that matters more than the code.** One person runs
+`makemigrations` for this wave. Two developers generating migrations for `core` in parallel
+produces a conflict that breaks `migrate` for everybody, and at hour 20 that is an hour
+nobody has. Announce the schema to the team **before** pushing it.
 
-SQLite needs no setup, which removes the database-provisioning risk entirely. Delete
-`db.sqlite3` and re-run `migrate` any time it gets into a bad state.
+**Decisions already made that this task must honour:**
 
-**T-00 runs in parallel.** The open ADRs — ADR-005 above all — block the critical path.
-CLAUDE.md's "Resolving open decisions" section authorises closing them; do that alongside
-this task rather than after it.
+- **ADR-010** fixes the `Quotation.stage` enum: `DRAFT · PENDING_APPROVAL · REJECTED ·
+  APPROVED · SENT · UNDER_NEGOTIATION · CONFIRMED · FULFILLED · INVOICED · PAID`. `SENT` is
+  a real stage reachable **only** from `APPROVED`. There is no second portal-status field —
+  portal status is a display mapping over `stage`.
+- **ADR-005** fixes `ApprovalChainRule` as `score_min` / `score_max` / `requires_manager` /
+  `requires_finance`, with the bands as data.
+- **ADR-004** means `Quotation.portal_token` holds a signed `TimestampSigner` value and
+  there is no customer user table.
+- **The A5 split** (DECISIONS.md, second-pass consistency check) makes `SubscriptionPlan`
+  a **P0 entity** — AC-1 requires a subscription plan to be created and to persist.
+  `BillingScheduleEntry` stays out of P0 and arrives with T-20.
+
+### Scope
+
+User (exists), CustomerTier, Customer, Category, Product, PriceListEntry,
+CategoryDiscountCeiling, ApprovalChainRule, Quotation, QuotationLine, ApprovalStep,
+AuditLog, Warehouse, Stock, FulfilmentAllocation, Invoice, Payment, PortalMessage,
+**SubscriptionPlan**.
+
+Models are split by domain across `core/models/` — `catalogue.py`, `parties.py`,
+`sales.py`, `inventory.py`, `billing.py` — per ARCHITECTURE.md, to keep four developers off
+each other's diffs. Re-export everything from `core/models/__init__.py`.
+
+Money fields are `DecimalField`. No `FloatField` anywhere near a price, a percentage or a
+margin (ADR-002).
 
 ### Acceptance criteria
 
-- [ ] `python manage.py runserver` serves a page.
-- [ ] `core` app exists with a custom `User` model carrying a `role` field
-      (`REP | MANAGER | FINANCE | ADMIN`), and `AUTH_USER_MODEL` points at it.
-- [ ] `python manage.py migrate` applies cleanly against a fresh `db.sqlite3`.
-- [ ] A `/health/` page renders a value read **from the database**, proving the round trip.
-- [ ] `python manage.py createsuperuser` works and `/admin/` loads.
-- [ ] `.gitignore` excludes `db.sqlite3`, `__pycache__/`, `.venv/`, `.env`.
-- [ ] `requirements.txt` pins Django and htmx-related deps (there should be very few).
-- [ ] `README.md` records the exact setup commands, runnable from a clean clone.
-- [ ] **All four team members** have cloned, installed and run it successfully.
+- [ ] Migration applies cleanly to an empty database (`rm db.sqlite3 && python manage.py migrate`).
+- [ ] Unique constraint on `Stock (product, warehouse)` enforced at database level, not
+      just in a form.
+- [ ] DATA_MODEL.md invariant 8 (`qty_reserved <= qty_on_hand`) expressed as a
+      `CheckConstraint`.
+- [ ] DATA_MODEL.md invariant 11 (Σ payments ≤ invoice amount) expressed where SQLite
+      allows; where it cannot be a constraint, it is enforced in the service and that is
+      stated in a comment rather than assumed.
+- [ ] DATA_MODEL.md invariant 9 (`RECURRING` line has a plan, `ONE_TIME` does not)
+      expressed as a `CheckConstraint`.
+- [ ] `Quotation.stage` uses exactly ADR-010's enum, as `TextChoices`.
+- [ ] Every model is importable from `core.models` and `python manage.py check` is clean.
+- [ ] `python manage.py test` still passes (the two ADR-005 spec tests still skip).
+- [ ] Schema announced to the team before the migration is pushed.
 
-### Expected files / modules
+### Out of scope
 
-```
-manage.py
-requirements.txt                 django, and very little else
-.gitignore, .env.example
-config/settings.py               AUTH_USER_MODEL set here, SQLite default
-config/urls.py, config/wsgi.py
-core/__init__.py, core/apps.py
-core/models/__init__.py          package, split by domain later (see ARCHITECTURE.md)
-core/models/parties.py           custom User only, for now
-core/admin.py                    register User
-core/views.py, core/urls.py      health view
-core/templates/core/base.html    Tailwind CDN, dark theme shell
-core/templates/core/health.html
-README.md
-```
-
-Nothing else. No services, no auth views, no quotation models, no portal app — those belong
-to their own tasks. Do not scaffold empty modules "for later".
-
-### Dependencies
-
-None. This is the first task.
+Admin registration (T-05, T-06, T-07), the seed script (T-03), and every service module.
+Do not write `core/services/risk.py` here — T-09 owns it, and `core/tests/test_risk.py` is
+already waiting for it.
 
 ### Verification plan
 
-1. Delete `db.sqlite3`, `.venv` and `__pycache__`. Clone fresh into a scratch directory.
-2. Follow only what README.md says. If a step is missing, README.md is wrong — fix it.
-3. Load `/health/` and confirm the value came from the database, not a hardcoded constant.
-4. Load `/admin/`, log in as the superuser, confirm the custom User model appears with its
-   `role` field.
-5. Have a second team member repeat steps 1–4 on their own machine.
-6. Commit and push. Confirm the evaluator (`kais-odoo`, `hackathon-odoo`) is already a
-   collaborator on the repository.
+1. `rm db.sqlite3 && python manage.py migrate` from clean — no warnings, no interactive prompts.
+2. In `manage.py shell`, create one row of each entity and read it back.
+3. Deliberately violate each constraint above and confirm the database refuses it.
+4. `python manage.py test` — green, with the two risk tests still skipping.
 
 ### Then what
 
-T-02 (full schema) and T-03 (seed) follow immediately and unblock all four parallel tracks.
-
-Two coordination rules from hour one:
-
-- **One person runs `makemigrations` per wave.** Two people generating migrations for the
-  same app in parallel produces a conflict that breaks `migrate` for everybody.
-- **T-03 is the highest-leverage early task.** Every track needs data to build against, and
-  the seeded stock (Main Warehouse 4, East Depot 10, demo order of 6) is what makes the
-  warehouse split actually trigger during the demo.
+T-03 (seed script) immediately after, and it is the highest-leverage task in the build:
+every other track needs data. The seeded stock — **Main Warehouse 4, East Depot 10, demo
+order of 6** — is what makes the warehouse split actually trigger on stage, and without it
+AC-5 cannot be demonstrated at all.

@@ -96,10 +96,32 @@ overall order limit.
   quotation by hand; and it stops a rep keeping every line technically within limits while
   discounting the order more than the company intends overall.
 
-**DECISION NEEDED — exact formula and thresholds.** The PDF describes the behaviour and
-gives worked examples but does not specify the arithmetic. See ADR-005. Whatever formula
-is chosen must reproduce both PDF examples: the single 8-points-over line must trigger
-approval, and several small overages must accumulate into a flag.
+**The formula (ADR-005, Accepted).** The blended risk score is **the total number of
+discount percentage points given away above ceiling across the whole quotation, where every
+line is measured against the stricter of its customer tier's ceiling and its category's.**
+
+For each line:
+
+- `given = 100 × (1 − (1 − line_discount_pct/100) × (1 − order_discount_pct/100))` — an
+  order-level discount is a real discount on every line, so it is scored as one.
+- `allowed = min(tier.max_discount_pct, categoryCeiling.max_discount_pct)`.
+- `over_by = max(0, given − allowed)`. A line inside its ceiling contributes nothing.
+
+Then `risk_score = Σ over_by`, as `Decimal` quantised to `0.01`, and the quotation is
+**flagged for approval whenever `risk_score > 0`**. The service returns the score together
+with a per-line given / allowed / over-by breakdown, because the approval screen (FR-14)
+cannot explain the number without it.
+
+Both PDF §10 examples are reproduced, and are asserted by `core/tests/test_risk.py`, which
+was written before the implementation and is the specification for it: the single
+8-points-over Services line scores 8.00 and flags the quotation; three lines at 2, 3 and 2
+points over score 7.00 and flag it too.
+
+**Routing thresholds are configuration, not code** (FR-07). They live in
+`ApprovalChainRule` rows: `0.00–0.00` → no approval; `0.01–7.99` → Sales Manager only;
+`8.00` and above → Sales Manager then Finance. Ranges are inclusive and must tile the whole
+space; a score matching no rule is a configuration error and fails loudly rather than
+silently skipping governance.
 
 ### BR-2 — Approval routing
 - When a quote mixes categories with different ceilings, the system computes a blended
@@ -117,8 +139,19 @@ All approvals, rejections and edits must be logged with **user, timestamp, and r
 - The user may accept the suggestion or manually override it.
 - If stock arrives mid-fulfilment, a "Consolidate Remaining Backorder" prompt appears
   automatically.
-- **DECISION NEEDED — the split algorithm.** The PDF states the objective (minimise
-  shipments, weight by shipping cost) but not the method. See ADR-006.
+- **The split rule (ADR-006, Accepted) — a documented greedy heuristic, described as one.**
+  **Fill each line from the cheapest warehouse first and spill into the next cheapest,
+  except that if the cheapest warehouse can cover the whole line by itself it ships alone;
+  whatever is left over becomes a backorder.** Warehouses are ranked by ascending
+  `shipping_cost_weight`, tie-broken by descending available quantity
+  (`qty_on_hand − qty_reserved`) then by warehouse id, so the suggestion is deterministic.
+  Shipment count is the number of distinct warehouses in the non-backorder allocations, and
+  estimated cost is `Σ (allocated qty × shipping_cost_weight)`.
+  With the seeded demo stock — 6 × Laptop Pro 14, Main Warehouse 4 at weight 1.0, East Depot
+  10 at weight 1.4 — this splits **4 + 2** at a cost of 6.80. One shipment of 6 from East
+  Depot alone would cost 8.40, so "minimise the number of shipments" is read as *weighted by
+  shipping cost*, which is what PDF A4's same sentence also says. See ADR-006 for the
+  trade-off in full.
 
 ### BR-5 — Hybrid billing
 - A single order can mix one-time products and recurring subscription lines.
@@ -262,13 +295,20 @@ Evaluator `kais-odoo` / `hackathon-odoo` added as GitHub collaborator.
 
 ## 12. Open ambiguities
 
-Tracked as DECISION NEEDED entries in `DECISIONS.md`. Summary:
+Tracked as DECISION NEEDED entries in `DECISIONS.md`. Still open:
 
-- Exact blended risk score formula and routing thresholds (ADR-005).
-- Warehouse split algorithm (ADR-006).
 - Discount anomaly threshold; "well above historical average" is unquantified (ADR-007).
 - Stalled-deal day count — PDF says "configured", default not given (ADR-007).
 - Proration method for mid-cycle changes — daily vs monthly basis not specified (ADR-008).
-- Whether portal access is magic link or email + password — PDF offers both (ADR-004).
 - Tax handling: products carry a Tax field but no tax rules are specified (ADR-009).
 - "Sales Team" appears as a reporting filter but no team entity is described (ADR-009).
+
+All three remaining ADRs block P1 tasks only (T-20, T-21, T-23), so no P0 work is waiting
+on them.
+
+**Closed by T-00** and now stated above rather than deferred: the blended risk score formula
+and routing thresholds (ADR-005, see BR-1), the warehouse split algorithm (ADR-006, see
+BR-4), the customer portal access mechanism (ADR-004 — a signed quotation-scoped token in
+the URL, no customer accounts and no email), and the quotation stage machine (ADR-010 — one
+`stage` enum, `SENT` a real stage reachable only from `APPROVED`, `REJECTED` terminal, with
+return-for-revision as a separate action sending the quotation back to `DRAFT`).

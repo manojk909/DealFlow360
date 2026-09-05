@@ -52,10 +52,19 @@ Open this in a **second browser profile** so the two UIs are visibly different p
 |---|---|---|
 | B1 | Open the portal link for the **Beta Industries** quotation | A different, restricted UI. Status: Sent. No internal nav, no other customers' quotations reachable. |
 | B2 | Comment on a line: *"can you do better on the service?"* | Comment appears in the negotiation thread, attributed to the customer. |
-| B3 | Enter a **counter-discount of 20%** and Submit Request | Status → Under Negotiation. |
+| B3 | Enter a **counter-discount of 15%** and Submit Request | Status → Under Negotiation. Beta Industries is Silver, ceiling 10%, so 15% is 5 points over — enough to re-enter approval, and it lands in the Manager-only band. |
 | B4 | Switch back to the internal workspace | The quotation has **re-entered Pending Approval on its own** — the counter pushed the score past the threshold. This is AC-7 and the single best moment of the demo. |
-| B5 | Manager approves | Stage → Approved. |
+| B5 | Manager approves | Stage → Approved. No Finance step, because 5 points is inside the Manager-only band — the chain rules decide, and Flow A already showed the two-step chain. |
 | B6 | Back in the portal, click **Confirm Quotation** | Status → Confirmed, order moves to fulfilment. |
+
+> **Why 15% and not 20%.** This step said 20% until ADR-005 fixed the routing bands. At 20%
+> a Silver customer is 10 points over, which crosses the 8.00 threshold and pulls in Finance
+> as well as the Manager — so B5's "Manager approves" would have left the quotation sitting in
+> Pending Approval on stage, and B6's Confirm would have failed. 15% keeps Flow B to the one
+> beat it exists to show (the counter re-entering approval by itself, AC-7) while Flow A
+> already demonstrates the full Manager → Finance chain. If you would rather show the deeper
+> chain here, counter at 20% and add a Finance approval between B5 and B6 — but rehearse it,
+> because it costs another login switch inside a 90-second flow.
 
 ### Close (~1 min)
 
