@@ -126,7 +126,7 @@ than emailed. Real SMTP is a live dependency during a demo and buys nothing; Dja
 **Open sub-question.** Whether to send actual email at all. Not required by any acceptance
 criterion.
 
-**Blocks:** T-13 (portal access), T-14 (portal negotiation).
+**Blocks:** T-14 (portal access and restricted view), T-15 (portal negotiation and the re-approval loop).
 
 ---
 
@@ -157,7 +157,7 @@ ApprovalChainRule rows, not in code.
 arbitrary to a judge. Whatever is chosen, the approval screen must show the per-line
 given / allowed / over-by breakdown that produced the number.
 
-**Blocks:** T-08 (risk score), T-09 (approval routing).
+**Blocks:** T-09 (blended discount risk score), T-10 (automatic approval routing and audit trail).
 
 ---
 
@@ -181,7 +181,7 @@ shipment count trade off against each other; tie-breaking between warehouses.
 requires this to be real application logic — a heuristic that is documented as a heuristic
 qualifies; a hardcoded split for the demo does not.
 
-**Blocks:** T-15 (fulfilment split).
+**Blocks:** T-16 (warehouse split and backorders).
 
 ---
 
@@ -203,7 +203,7 @@ in the data model, since no promise-date field appears anywhere in the PDF.
 starts, the dashboard can ship with stalled-deal detection only and the anomaly panel
 marked incomplete — honestly labelled, per the integrity rule.
 
-**Blocks:** T-19 (deal health dashboard).
+**Blocks:** T-21 (deal health and anomaly dashboard).
 
 ---
 
@@ -224,7 +224,7 @@ the same thing expressed differently; whether unused time is refunded or credite
 notes are BONUS. A defensible, documented simple rule beats an elaborate one that is not
 finished.
 
-**Blocks:** T-17 (subscription billing).
+**Blocks:** T-20 (subscription lines and hybrid billing).
 
 ---
 
@@ -249,7 +249,7 @@ implement:
 **Note.** All three are peripheral to the eight acceptance criteria. The lazy correct
 answer for each is probably the smallest thing that satisfies the words in the PDF.
 
-**Blocks:** T-04 (product config), T-20 (reporting).
+**Blocks:** T-05 (product, category and price list configuration), T-23 (reporting with filters).
 
 ---
 
@@ -271,7 +271,7 @@ reject, which suggests they differ).
 **Note.** Invariants 1, 2, 5 and 13 in DATA_MODEL.md constrain this regardless of shape —
 whatever stage machine is chosen must make those invariants expressible.
 
-**Blocks:** T-06 (quotation model).
+**Blocks:** T-02 (schema and migrations — the Quotation stage enum is defined there).
 
 ---
 
@@ -288,7 +288,7 @@ Run after all documents were created (Step 12).
 - DATA_MODEL.md carries an entity for every SPEC.md functional requirement.
 - DEMO.md's Flow A covers AC-1…AC-6 and AC-8; Flow B covers AC-7. All eight are demonstrated.
 - BACKLOG.md P0 covers every MUST in SPEC.md §7; no P0 task depends on an unresolved
-  Decision Needed except T-08/T-09 (ADR-005), which is flagged as the first thing to settle.
+  Decision Needed except T-09/T-10 (ADR-005), which is flagged as the first thing to settle.
 - CURRENT.md points at T-01, which has no dependencies.
 
 **Contradictions found:** none between documents.
@@ -301,3 +301,46 @@ its configuration screen — is explicitly Optional. But the panel appears in th
 acceptance test as AC-4. It is therefore built as P1 rather than P2: the *panel* is
 effectively required by the test flow even though its *config screen* is optional. This is
 a reading of the PDF, not an invention, and is recorded here so it can be challenged.
+
+---
+
+## Cross-document consistency check — 2026-09-05 (second pass)
+
+Run before T-01 started. Three contradictions were found and fixed; they are recorded here
+rather than silently corrected.
+
+1. **Stack leftovers in DATA_MODEL.md.** The "Calculated fields" table named `pricing.ts`,
+   `risk.ts`, `fulfilment.ts`, `upsell.ts` and `health.ts` — TypeScript filenames surviving
+   from a draft written before ADR-001 chose Django. Corrected to `core/services/*.py`,
+   matching ARCHITECTURE.md. (The Next.js + Prisma mentions in ADR-001 are deliberate: they
+   record rejected alternatives and are not leftovers.)
+
+2. **Stale task IDs in every ADR `Blocks:` line.** ADR-004 said T-13/T-14, ADR-005 T-08/T-09,
+   ADR-006 T-15, ADR-007 T-19, ADR-008 T-17, ADR-009 T-04/T-20, ADR-010 T-06 — all written
+   against an earlier numbering of BACKLOG.md. Every line now cites the real task and names
+   it, so a wrong number is visible rather than merely wrong. BACKLOG.md's own T-00 was the
+   correct mapping in every case **except** ADR-010, which it pointed at T-06 (approval chain
+   config). The Quotation stage enum is defined in T-02, so both were corrected to T-02.
+
+3. **A5 scope — the same argument as the upsell panel above.** SPEC.md marked A5
+   (subscription / recurring plan setup) SHOULD in full. But AC-1, which is PDF §9 verbatim,
+   requires the tester to "set up basic backend data: a discount tier, a warehouse, a
+   subscription plan" and for all three to persist. A MUST acceptance criterion cannot depend
+   on a SHOULD feature.
+
+   **Decision.** A5 is split. The `SubscriptionPlan` entity and its Django admin CRUD are
+   **MUST**: they move into T-02's entity list, T-03's seed and T-05's config screens.
+   Recurring *billing behaviour* — BillingScheduleEntry rows, proration, cancellation refunds
+   (FR-30, FR-31, FR-32) — stays **SHOULD/BONUS** in T-20, and AC-6 rather than AC-1 is what
+   exercises it.
+
+   **Reason.** This is the identical reading applied to the upsell panel in the note above: a
+   feature named in the PDF's own acceptance test is required by the test flow even where its
+   surrounding module is marked optional. Promoting the smallest unit that makes AC-1 pass —
+   a plan row and a screen to create it — costs one model and one admin registration, and
+   leaves the genuinely expensive part (proration) where the PDF's priorities put it.
+
+   **Consequences.** T-02 gains one model, T-03 gains one seed row, T-05 gains one admin
+   registration. `BillingScheduleEntry` deliberately stays out of P0 — a plan that exists and
+   persists satisfies AC-1; billing against it does not have to. ADR-008 (proration method)
+   therefore still blocks only T-20, not any P0 task.

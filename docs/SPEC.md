@@ -42,7 +42,7 @@ document instead of a static PDF.
 | A2 | **Product & price list management.** General info: name, category, price, unit, tax, description. Variants: attribute (e.g. Size, Pack), values, extra prices. Price lists: customer-tier-based pricing, currency-specific rules. | MUST (variants: SHOULD) |
 | A3 | **Discount tier & approval chain setup.** Discount ceilings per customer tier (e.g. Bronze ≤5%, Silver ≤10%, Gold ≤15%). Category-specific ceilings. Approval chain config: which discount range needs Sales Manager only, which needs Sales Manager then Finance. | MUST |
 | A4 | **Warehouse & fulfilment setup.** Create/manage warehouses (e.g. "Main Warehouse", "East Depot"). Stock levels and replenishment rules per warehouse. Shipping cost weighting used by auto-split logic to minimise shipments. | MUST (replenishment rules: SHOULD) |
-| A5 | **Subscription / recurring plan setup.** Recurring plans (monthly, quarterly, yearly) attachable to products or services. Proration rules for mid-cycle quantity or plan changes. Cancellation and partial refund rules. | SHOULD |
+| A5 | **Subscription / recurring plan setup.** Recurring plans (monthly, quarterly, yearly) attachable to products or services. Proration rules for mid-cycle quantity or plan changes. Cancellation and partial refund rules. | **Split.** Plan setup — the `SubscriptionPlan` entity and its admin CRUD — is **MUST**, because AC-1 requires a subscription plan to be created and to persist. Recurring billing behaviour — schedules, proration, cancellation refunds — remains **SHOULD**. |
 | A6 | **Upsell / cross-sell rule setup.** *(PDF marks this section Optional.)* Product pairings from historical co-purchase data. Promoted-product flag ranks suggestions higher. Minimum margin thresholds so only healthy-margin suggestions surface. | BONUS |
 | A7 | **Reporting & dashboard configuration.** Dashboard plus reporting menu for sales performance. Export to PDF / XLS. Filters: Period, Sales Team / Rep, Approval Status, Product / Category. | SHOULD (export: BONUS) |
 
@@ -173,13 +173,17 @@ Each of these is directly implementable and testable. IDs map to backlog tasks.
 - FR-23 Customer portal: counter-discount proposal; on submit, re-scoring and automatic re-entry into approval when thresholds are exceeded.
 - FR-24 Customer portal: Confirm Quotation.
 - FR-25 Seed data sufficient to demonstrate every MUST flow.
+- FR-29 Subscription plan configuration: CRUD for plans with a name and an interval
+  (monthly / quarterly / yearly), attachable to a product. **Promoted from SHOULD to
+  MUST** because AC-1 requires a subscription plan to be set up and to persist. Only the
+  plan record and its admin screen are MUST; the proration and cancellation *rules* the
+  plan carries are exercised by FR-31 and FR-32, which stay SHOULD/BONUS.
 
 **SHOULD HAVE**
 
 - FR-26 Product variants with attributes, values and extra prices.
 - FR-27 Kanban pipeline view of quotations by stage.
 - FR-28 Upsell / cross-sell panel with ranked suggestions, margin delta, promotion tag, Add / Dismiss.
-- FR-29 Subscription plan configuration (monthly / quarterly / yearly) with proration rules.
 - FR-30 Order screen separating one-time and recurring lines, with upcoming billing schedule.
 - FR-31 Mid-cycle proration on quantity change.
 - FR-32 Subscription cancel / modify with partial refund or credit note trigger.

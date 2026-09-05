@@ -170,16 +170,16 @@ Backs the ranked upsell suggestions (A6, B5).
 
 | Field | Derivation | Where |
 |---|---|---|
-| `QuotationLine.line_total` | `qty × unit_price × (1 − discount_pct/100)` | `pricing.ts` |
-| `Quotation.subtotal`, `.total` | sum of lines, then order-level discount | `pricing.ts` |
-| `Quotation.margin_amount/pct` | `(total − Σ line_cost) / total` | `pricing.ts` |
-| `Quotation.risk_score` | blended over-ceiling score, BR-1 | `risk.ts` |
-| effective line ceiling | `min(tier.max_pct, categoryCeiling.max_pct)` | `risk.ts` |
-| available stock | `qty_on_hand − qty_reserved` | `fulfilment.ts` |
-| shipment count | distinct warehouses in allocations | `fulfilment.ts` |
-| upsell margin delta | margin after adding − margin now | `upsell.ts` |
-| stalled | `now − last_activity_at > configured days` | `health.ts` |
-| discount anomaly | line discount vs rep's historical average | `health.ts` |
+| `QuotationLine.line_total` | `qty × unit_price × (1 − discount_pct/100)` | `core/services/pricing.py` |
+| `Quotation.subtotal`, `.total` | sum of lines, then order-level discount | `core/services/pricing.py` |
+| `Quotation.margin_amount/pct` | `(total − Σ line_cost) / total` | `core/services/pricing.py` |
+| `Quotation.risk_score` | blended over-ceiling score, BR-1 | `core/services/risk.py` |
+| effective line ceiling | `min(tier.max_pct, categoryCeiling.max_pct)` | `core/services/risk.py` |
+| available stock | `qty_on_hand − qty_reserved` | `core/services/fulfilment.py` |
+| shipment count | distinct warehouses in allocations | `core/services/fulfilment.py` |
+| upsell margin delta | margin after adding − margin now | `core/services/upsell.py` |
+| stalled | `now − last_activity_at > configured days` | `core/services/health.py` |
+| discount anomaly | line discount vs rep's historical average | `core/services/health.py` |
 
 Stored where the demo must show a historical value (`risk_score` at approval time);
 computed on read where it must be live (margin while editing).

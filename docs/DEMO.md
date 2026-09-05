@@ -100,6 +100,8 @@ them on the config screen.
 margin indicator has something to show. Must include: Laptop Pro 14 (Hardware), Onsite
 Setup Service (Services), Care Plan 2yr (Subscriptions, monthly plan).
 
+**Subscription plans** — one monthly plan, attached to Care Plan 2yr. Required by AC-1.
+
 **Warehouses** — Main Warehouse (shipping weight 1.0), East Depot (1.4).
 
 **Stock — the most important seed decision.** Main Warehouse holds **4** Laptop Pro 14;

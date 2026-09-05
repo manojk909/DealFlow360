@@ -29,7 +29,7 @@ Track B is the critical path. If it slips, everything else is decoration.
 - **ADR-005** blended risk score formula and routing thresholds → blocks T-09, T-10.
 - **ADR-006** warehouse split algorithm → blocks T-16.
 - **ADR-004** portal access mechanism → blocks T-14, T-15.
-- **ADR-010** quotation stage machine shape → blocks T-06's model work.
+- **ADR-010** quotation stage machine shape → blocks T-02's Quotation model work.
 - ADR-008 (proration), ADR-007 (deal health), ADR-009 (tax / sales team / replenishment)
   are P1 and may be deferred until their tasks come up.
 
@@ -58,7 +58,9 @@ Track B is the critical path. If it slips, everything else is decoration.
 **Depends on.** T-01.
 **Scope.** User, CustomerTier, Customer, Category, Product, PriceListEntry,
 CategoryDiscountCeiling, ApprovalChainRule, Quotation, QuotationLine, ApprovalStep,
-AuditLog, Warehouse, Stock, FulfilmentAllocation, Invoice, Payment, PortalMessage.
+AuditLog, Warehouse, Stock, FulfilmentAllocation, Invoice, Payment, PortalMessage,
+SubscriptionPlan (MUST as of the A5 split — AC-1 requires a plan to persist;
+BillingScheduleEntry stays out of P0 and lands with T-20).
 **Acceptance.**
 - Migration applies cleanly to an empty database.
 - Unique constraint on Stock (product, warehouse) enforced at DB level.
@@ -70,7 +72,9 @@ AuditLog, Warehouse, Stock, FulfilmentAllocation, Invoice, Payment, PortalMessag
 **Depends on.** T-02.
 **Acceptance.**
 - All four users, three tiers, three categories, category ceilings, approval chain rules,
-  three customers, ≥8 products with costs, two warehouses, stock, five quotations.
+  three customers, ≥8 products with costs, two warehouses, stock, five quotations,
+  and at least one SubscriptionPlan (monthly) attached to Care Plan 2yr — AC-1
+  cannot pass without a plan that persists and is visible on reload.
 - **Main Warehouse holds 4 Laptop Pro 14, East Depot 10** — single-warehouse fulfilment of
   the 6-unit demo order is impossible. Without this, AC-5 cannot be demonstrated.
 - One quotation with a backdated `last_activity_at` for the stalled-deal case.
@@ -99,6 +103,8 @@ AuditLog, Warehouse, Stock, FulfilmentAllocation, Invoice, Payment, PortalMessag
 **Acceptance.**
 - CRUD for products: name, category, price, cost, unit, tax, description.
 - CRUD for price list entries per tier.
+- CRUD for subscription plans (name + interval), registered in Django admin. MUST as
+  of the A5 split; the proration and cancellation *rules* on the plan are T-20's job.
 - Validation: no negative prices, no missing category.
 - A product created here is immediately selectable in the quotation builder.
 - Note ADR-009 item 1 — tax is stored but its role in totals is undecided.
