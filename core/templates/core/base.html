@@ -59,7 +59,10 @@
   {% block topbar %}
   <header class="border-b border-slate-800 bg-slate-900/60">
     <div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
-      <a href="{% url 'core:health' %}" class="flex items-baseline gap-2 no-underline">
+      <a href="{% url 'core:health' %}" class="flex items-center gap-2 no-underline">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-sky-600 text-white">
+          {% include "core/partials/logo.html" with size="h-4 w-4" %}
+        </span>
         <span class="text-lg font-semibold tracking-tight text-slate-100">DealFlow360</span>
         <span class="hidden text-xs text-slate-500 sm:inline">self-governing sales operations</span>
       </a>
@@ -76,6 +79,34 @@
   <main class="{% block main_class %}mx-auto max-w-5xl px-4 py-8{% endblock %}">
     {% block content %}{% endblock %}
   </main>
+
+  {% comment %} One footer for every chrome. `footer_class` is what each layout uses to line it
+     up with its own content column — the workspace indents it past the sidebar, the login
+     page hides it outright. Nothing here links into the internal app, because the same
+     block renders on the signed-out pages. {% endcomment %}
+  <footer class="{% block footer_class %}mx-auto max-w-5xl px-4 pb-8{% endblock %}">
+    <div class="flex flex-col gap-3 border-t border-slate-800 pt-5 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+
+      <div class="flex items-center gap-2">
+        <span class="text-slate-600">{% include "core/partials/logo.html" with size="h-3.5 w-3.5" %}</span>
+        <span class="font-medium text-slate-400">DealFlow360</span>
+        <span aria-hidden="true">&middot;</span>
+        <span>Quote to cash to renewal, governed by policy.</span>
+      </div>
+
+      <div class="flex items-center gap-4">
+        {% comment %} A real link to the real health view, not a decorative "all systems
+           operational" badge that would be a claim nothing checks. {% endcomment %}
+        <a href="{% url 'core:health' %}" class="flex items-center gap-1.5 text-slate-500 no-underline hover:text-sky-400">
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true"></span>
+          System status
+        </a>
+        <span class="hidden sm:inline">v1.0</span>
+        <span>&copy; {% now "Y" %} DealFlow360</span>
+      </div>
+
+    </div>
+  </footer>
 
   {% comment %} HTMX drops the response body of any non-2xx by default, so a validation
      refusal (400) or a locked-stage refusal (409) swapped nothing and the user saw the

@@ -1,0 +1,16 @@
+{% comment %} The DealFlow360 mark, as inline SVG so it needs no network and scales cleanly.
+
+   The shape is the product in one glyph: an open loop — the 360, the deal coming back
+   round through negotiation and renewal — with an arrow rising through it, which is the
+   flow the loop governs. Drawn on a 24-unit grid with a 2-unit stroke so it stays legible
+   at 16px in the sidebar and at 64px on the sign-in page.
+
+   Usage: {% include "core/partials/logo.html" with size="h-9 w-9" %}
+{% endcomment %}
+<svg class="{{ size|default:'h-6 w-6' }}" viewBox="0 0 24 24" fill="none"
+     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+     role="img" aria-label="DealFlow360">
+  <path d="M20.5 12a8.5 8.5 0 1 1-3.6-6.9" opacity="0.55"/>
+  <path d="M16.4 1.9 17.4 5.6 13.7 6.6"/>
+  <path d="M7.5 14.8 10.6 11.4 13 13.6 16.8 9"/>
+</svg>
