@@ -15,6 +15,9 @@ db.sqlite3-journal
 # Vendored front-end assets ARE committed on purpose (T-26): the demo must not
 # depend on venue wifi. Do not add core/static/vendor/ here.
 
+# collectstatic output — a build artefact, rebuilt by build.sh on every deploy.
+staticfiles/
+
 # Editors / OS
 .vscode/
 .idea/

@@ -1011,3 +1011,58 @@ so the query budget is unchanged. Neither writes anything.
 PDF names a minimum-margin threshold only for upsell suggestions (ADR-011), and inventing a
 second one here would be a rule nobody asked for.
 
+---
+
+## ADR-018 — Deploy on a free-tier PaaS with SQLite on ephemeral disk
+
+**Status:** Accepted
+**Date:** 2026-09-06
+
+**Context.** The application needed to be reachable at a URL rather than only on one
+laptop — a judge should be able to open it without a screen share, and "it runs on my
+machine" is a weaker claim than a link. ADR-002 chose SQLite: one file at
+`BASE_DIR/db.sqlite3`. Free-tier PaaS instances give you an **ephemeral filesystem**: the
+disk is rebuilt on every deploy, so that file does not survive one.
+
+There is also no static file server in front of the application. With `DEBUG=False`,
+Django stops serving static files itself, so the vendored Tailwind, HTMX and theme CSS
+would 404 and every screen would render unstyled.
+
+**Decision.** **Deploy to Render's free tier, keep SQLite, and accept that the database is
+rebuilt on every redeploy.** `build.sh` runs `collectstatic`, `migrate` and then
+`seed_demo`. WhiteNoise serves the collected static files from inside the application
+process.
+
+**Reason.** `seed_demo` is idempotent and reproduces the exact `docs/DEMO.md` state in
+seconds — the same script the demo already depends on. So the thing usually fatal about an
+ephemeral disk, losing data, is not a loss here: **there is no real data to lose.** The
+deployed instance exists to prove the application runs outside one laptop, not to hold a
+customer's quotations. Every redeploy returns it to a known-good demo state, which is
+arguably better for a demo than accumulating whatever the last visitor typed.
+
+**Rejected: managed Postgres.** It is the correct answer for anything holding real data,
+and it is what we would use the moment this stopped being a demo. But it costs money on
+every provider worth using, and it adds a service dependency, a connection string and a
+second failure mode to a build whose whole persistence story is "one file, rebuilt from a
+script in seconds". ADR-002 already argued that SQLite compromises nothing about the data
+model, and nothing about deploying changes that. Buying a database to hold data we
+deliberately regenerate would be paying for a problem we do not have.
+
+**Consequences.**
+- **Anything typed into the deployed instance is lost on the next deploy.** Stated plainly
+  in the README rather than left to be discovered.
+- The free tier sleeps after 15 minutes idle, so the first request after a pause takes
+  around 30 seconds. Worth knowing before demonstrating it live; the local instance is the
+  one to demo from.
+- `gunicorn` and `whitenoise` are added to `requirements.txt` but are **deployment-only** —
+  no application code imports either.
+- **The WhiteNoise middleware and storage backend are behind an import guard.** The local
+  demo venv does not have whitenoise installed, and an unguarded `MIDDLEWARE` entry would
+  crash `runserver` on startup. Guarded, a machine without it falls back to Django's own
+  static handling and local development is untouched. Verified both ways.
+- `SECURE_SSL_REDIRECT` is only set when `DEBUG` is off, and is paired with
+  `SECURE_PROXY_SSL_HEADER` — Render terminates TLS at its proxy, and without that header
+  Django sees plain http and the redirect loops forever.
+- `CSRF_TRUSTED_ORIGINS` needs the **full scheme** on Django 4+. A bare hostname is
+  silently ignored and every POST then fails CSRF behind the proxy.
+- `staticfiles/` is gitignored: a build artefact, rebuilt on every deploy.

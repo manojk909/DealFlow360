@@ -201,6 +201,24 @@ on venue wifi.
 - **Dates use `timezone.localdate()`, never `timezone.now().date()`** — the latter is UTC,
   which put the whole app a day behind between 18:30 and midnight IST.
 
+## Deploying
+
+Runs on a free-tier PaaS (Render) with no code changes. Build `./build.sh`, start
+`gunicorn config.wsgi:application`. Five environment variables:
+
+| Variable | Value |
+|---|---|
+| `DJANGO_SECRET_KEY` | any long random string |
+| `DJANGO_DEBUG` | `False` |
+| `DJANGO_ALLOWED_HOSTS` | `your-app.onrender.com` |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://your-app.onrender.com` — **full scheme required** |
+| `PYTHON_VERSION` | `3.13.5` |
+
+Two things to know rather than discover. **SQLite sits on ephemeral disk, so every redeploy
+wipes it** — `build.sh` runs `seed_demo`, which is idempotent, so the instance always comes
+back with the exact demo state. And **the free tier sleeps after 15 minutes idle**, so the
+first request after a pause takes about 30 seconds. See ADR-018.
+
 ## Documentation
 
 | File | What it holds |
@@ -208,7 +226,7 @@ on venue wifi.
 | `docs/SPEC.md` | Structured product requirements (MUST / SHOULD / BONUS) |
 | `docs/ARCHITECTURE.md` | Stack, layers, module boundaries |
 | `docs/DATA_MODEL.md` | Entities, relationships, invariants |
-| `docs/DECISIONS.md` | ADR log — 17 decisions, each with the reason and the alternative |
+| `docs/DECISIONS.md` | ADR log — 18 decisions, each with the reason and the alternative |
 | `docs/SCALE.md` | Query budgets, what was fixed, what breaks first at scale |
 | `docs/DEMO.md` | The five-minute demo this project must survive |
 | `docs/NEXT.md` | What is deliberately unbuilt, and why |
