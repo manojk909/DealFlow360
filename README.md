@@ -1,23 +1,148 @@
+<div align="center">
+
 # DealFlow360
 
-**An intelligent, self-governing sales operations platform.**
+**Sales operations that govern themselves.**
 
-A B2B sales platform that goes beyond quote-to-invoice: it enforces pricing discipline
-through multi-tier discount governance and automated approval routing, reacts to live
-inventory by splitting fulfilment across warehouses, keeps one-time and recurring
-subscription lines reconciled on a single order, and gives customers a living, negotiable
-quotation in their own portal instead of a static PDF.
+Quote to cash to renewal, with the pricing discipline built into the workflow
+rather than bolted on after the discount has already been given.
 
-Built for the Odoo Hackathon 2026 by **Team 317** (solo build).
+![Django](https://img.shields.io/badge/Django-5.2-092E20?logo=django&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-306%20passing-2ea44f)
+![Database](https://img.shields.io/badge/SQLite-single%20file-003B57?logo=sqlite&logoColor=white)
+![Odoo Hackathon](https://img.shields.io/badge/Odoo%20Hackathon-2026-714B67)
 
-**Requires Python 3.10 or newer** — see Setup below.
+</div>
+
+![The rep workspace](docs/screenshots/workspace.jpg)
+
+---
+
+## The problem
+
+A rep gives a discount. Someone messages a manager on chat. The manager says yes.
+Six weeks later nobody can tell you why that deal was approved.
+
+Discount policy lives in a document, not in the software. DealFlow360 puts it inside the
+system: **the rep never requests approval — the quotation routes itself.**
+
+## What makes it different
+
+**1. The score decides, not the rep.** Every line is measured against its own category
+ceiling for that customer's tier. The overage is summed into a blended risk score, and
+approval-chain rules — database rows, not constants — decide whether the deal is
+auto-approved, needs a manager, or needs manager *and* finance.
+
+**2. It answers the rep's actual question.** Every other tool stops at *"this needs
+approval."* DealFlow360 solves backwards from its own rules and returns the number:
+*"take this line to 11.4% and the quotation is auto-approved."* Same maths, run in
+reverse.
+
+**3. Two bounds on every line.** The policy ceiling above, the economic walk-away floor
+below — the discount at which the line stops making money at all. The rep negotiates
+inside a corridor instead of guessing.
+
+![Per-line governance on a quotation](docs/screenshots/quotation-governance.jpg)
+
+*Limit, floor, and the exact overage on the line that caused the routing — 19 points over
+on the laptop line, and the quotation sent itself for approval.*
+
+## The flow
+
+```mermaid
+flowchart LR
+  A["Rep builds<br/>quotation"] --> B{"Blended<br/>risk score"}
+  B -- "inside every ceiling" --> C["Approved"]
+  B -- "over ceiling" --> D["Sales Manager"]
+  D --> E{"above the<br/>finance band?"}
+  E -- "yes" --> F["Finance"]
+  E -- "no" --> C
+  F --> C
+  C --> G["Fulfilment<br/>split across warehouses"]
+  G --> H["Invoice<br/>+ recurring schedule"]
+  H --> I["Assets & MRR"]
+  I --> J["Renewal<br/>or amendment"]
+  J --> A
+  P["Customer portal<br/>counter-offer"] -.-> B
+```
+
+The dotted line is the part judges remember: a customer countering in the portal pushes
+the quotation back through the same scoring rules, with no rep in the middle.
+
+## Architecture in six lines
+
+```
+config/          settings, urls
+core/            the internal application
+  models/        catalogue · parties · sales · inventory · billing · assets · config
+  services/      ALL business logic — risk, approval, fulfilment, billing, assets, health
+  templates/     Django templates + HTMX; dark by default, light one toggle away
+portal/          customer-facing app, token-scoped, no login, no request.user
+```
+
+Views are thin. Every pricing, routing, splitting and billing decision happens in
+`core/services/`, so the workspace, the portal, and any future mobile client get the same
+answer. Configuration — tiers, ceilings, approval bands, warehouse weights, health
+thresholds — is data in the database, never a number typed into a view.
+
+**Performance.** Every list screen runs a fixed number of queries regardless of row count,
+and that is asserted in CI. See `docs/SCALE.md` for the measured budgets.
+
+---
+
+## Quickstart
+
+Python 3.10+ (developed on 3.13). No database server, no Node toolchain.
+
+```bash
+git clone https://github.com/manojk909/DealFlow360.git
+cd DealFlow360
+
+python -m venv .venv
+source .venv/bin/activate          # Windows: .\.venv\Scripts\Activate.ps1
+
+python -m pip install -r requirements.txt
+python manage.py migrate
+python manage.py seed_demo
+python manage.py runserver
+```
+
+Open http://127.0.0.1:8000/ and sign in. `seed_demo` creates the full demo dataset from
+`docs/DEMO.md` — users, tiers, categories, ceilings, approval rules, customers, ten
+products, subscription plans, two warehouses with deliberately split stock, and quotations
+across every stage. It is idempotent.
+
+**Demo accounts** — password `dealflow360` for all of them:
+
+| Email | Role |
+|---|---|
+| `rep@dealflow.test` | Sales Rep |
+| `manager@dealflow.test` | Sales Manager |
+| `finance@dealflow.test` | Finance |
+| `admin@dealflow.test` | Admin (superuser — the one that opens `/admin/`) |
+
+`rep2@`, `manager2@`, `finance2@`, `admin2@` exist as a mid-demo fallback set.
+Customers need no account at all — they reach a quotation through their own portal link.
+
+Run the tests:
+
+```bash
+python manage.py test
+```
+
+Reset the database (SQLite is one file, so this takes seconds):
+
+```bash
+rm db.sqlite3 && python manage.py migrate && python manage.py seed_demo
+```
 
 ---
 
 ## Status
 
 **Feature complete against the problem statement.** Every module in PDF §4 (A1–A7, B1–B9)
-is built, and all eight steps of the §9 quick test flow run end to end. **306 tests pass.**
+is built, all eight steps of the §9 quick test flow run end to end, and **306 tests pass.**
 
 | PDF module | Where it lives |
 |---|---|
@@ -47,14 +172,11 @@ Not built, and deliberately so: multi-currency and multi-company (PDF §7 marks 
 bonus), and subscription *plan* changes as distinct from quantity changes. See
 `docs/NEXT.md`.
 
-**Themes.** The dark theme copies the mockup and is the default; a light mode is one
-toggle in the sidebar footer, remembered per browser.
+**Themes.** Dark copies the mockup and is the default; light is one toggle in the sidebar
+footer, remembered per browser.
 
-**Currency.** ₹ (INR) by default with Indian digit grouping, configured on one settings row
-(ADR-012) rather than hard-coded per template.
-
-**Performance.** Every list screen is O(1) in row count, asserted in CI — see
-`docs/SCALE.md` for the measured query budgets and what was fixed to get there.
+**Currency.** ₹ (INR) by default with Indian digit grouping, set on one settings row
+(ADR-014) rather than hard-coded per template.
 
 ## Stack
 
@@ -62,195 +184,40 @@ toggle in the sidebar footer, remembered per browser.
 |---|---|
 | Framework | Django 5.2.17 |
 | Database | SQLite — one local file, `db.sqlite3` (ADR-002) |
-| Templates | Django templates + HTMX, Tailwind via CDN |
+| Templates | Django templates + HTMX; Tailwind vendored, no build step |
 | Auth | `django.contrib.auth` with a custom `core.User` carrying `role` (ADR-003) |
-| Tests | Django's built-in test runner |
+| Tests | Django's built-in test runner — 306 tests |
 
-Business logic lives in `core/services/` and nowhere else. See `docs/ARCHITECTURE.md`.
-
----
-
-## Setup from a clean clone
-
-Every command below is run from the repository root. There is no database server to
-install and no Node toolchain to build — SQLite is a file and Tailwind/HTMX are CDN script
-tags.
-
-### 1. Clone
-
-```bash
-git clone https://github.com/manojk909/DealFlow360.git
-cd DealFlow360
-```
-
-### 2. Create and activate a virtual environment
-
-**Minimum Python version: 3.10.** Django 5.2 supports 3.10 through 3.13. Developed and
-verified on **3.13.5**. Check yours before going further:
-
-```bash
-python --version
-```
-
-Anything below 3.10 will fail at `pip install`, not at runtime, so you will know immediately.
-
-```bash
-python -m venv .venv
-```
-
-```bash
-# Windows PowerShell
-.\.venv\Scripts\Activate.ps1
-
-# Windows Git Bash
-source .venv/Scripts/activate
-
-# macOS / Linux
-source .venv/bin/activate
-```
-
-### 3. Install dependencies
-
-```bash
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-### 4. Create the database
-
-```bash
-python manage.py migrate
-```
-
-This creates `db.sqlite3` in the repository root. It is gitignored — everyone builds their
-own from migrations, and later from the seed script.
-
-### 5. Load the demo data
-
-```bash
-python manage.py seed_demo
-```
-
-This is the fastest way to get a usable database. It creates the full demo dataset from
-`docs/DEMO.md` — users, tiers, categories, discount ceilings, approval chain rules,
-customers, ten products, subscription plans, two warehouses with stock, and five
-quotations across the stages. It is idempotent: running it twice gives the same state.
-
-It seeds eight accounts, all with the password **`dealflow360`**:
-
-| Email | Role |
-|---|---|
-| `rep@dealflow.test` | Sales Rep |
-| `manager@dealflow.test` | Sales Manager |
-| `finance@dealflow.test` | Finance |
-| `admin@dealflow.test` | Admin (superuser — this is the one that opens `/admin/`) |
-
-`rep2@`, `manager2@`, `finance2@` and `admin2@` exist as a mid-demo fallback set.
-
-**Or** create your own account instead:
-
-```bash
-python manage.py createsuperuser
-```
-
-You will be prompted for **email** (there is no username — `USERNAME_FIELD` is `email`),
-**full name**, and a password.
-
-### 6. Run it
-
-```bash
-python manage.py runserver
-```
-
-| URL | What it is |
-|---|---|
-| http://127.0.0.1:8000/health/ | Health page — every value on it is read from `db.sqlite3` |
-| http://127.0.0.1:8000/admin/ | Backend configuration area (SPEC §4 A2–A7) |
-
-`/` redirects to `/health/`.
-
-### 7. Optional — environment overrides
-
-Defaults work out of the box. To override the secret key, debug flag or allowed hosts:
-
-```bash
-cp .env.example .env
-python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"
-```
-
-Paste the generated key into `.env` as `DJANGO_SECRET_KEY`.
-
----
-
-## Running the tests
-
-```bash
-python manage.py test
-```
-
----
-
-## Resetting the database
-
-SQLite is a single file, so a reset takes seconds:
-
-```bash
-rm db.sqlite3          # Windows PowerShell: Remove-Item db.sqlite3
-python manage.py migrate
-python manage.py seed_demo
-```
-
-`seed_demo` alone is usually enough — it wipes and rebuilds every demo row in one
-transaction, so the file only needs deleting if the schema itself is in a bad state.
-Accounts you created yourself are preserved across a reseed; only the demo rows are
-replaced.
-
----
-
-## Repository layout
-
-```
-config/                 settings.py, urls.py, wsgi.py
-core/                   the internal application
-  models/               split by domain: catalogue, parties, sales, inventory, billing
-  management/commands/  seed_demo.py — rebuilds the exact docs/DEMO.md state
-  templates/core/       base.html (dark theme shell) + health.html
-  admin.py              backend configuration area registrations
-  views.py, urls.py     health check for now; rep workspace lands in T-11
-portal/                 customer-facing app, mounted at /portal/ — urls reserved,
-                        views land in T-14 (token-scoped, no login, ADR-004)
-docs/                   SPEC, ARCHITECTURE, DATA_MODEL, DEMO, DECISIONS
-tasks/                  BACKLOG, CURRENT, DONE
-manage.py
-db.sqlite3              local, gitignored, rebuilt from migrations
-```
-
----
+Tailwind and HTMX are served from `core/static/`, not a CDN, so the demo does not depend
+on venue wifi.
 
 ## Conventions that matter
 
-- **Never change `AUTH_USER_MODEL`.** It is set to `core.User` in `config/settings.py` and
-  was set before the first migration ran. Changing it now means deleting the database and
-  every migration. See ADR-003.
-- **One person runs `makemigrations` per wave.** Two developers generating migrations for
-  the same app in parallel breaks `migrate` for everybody. Announce a migration before
-  pushing it.
+- **Never change `AUTH_USER_MODEL`.** It is `core.User`, set before the first migration.
+  Changing it now means deleting the database and every migration. See ADR-003.
 - **Money is `Decimal`, computed in Python, inside `core/services/`.** SQLite has no
-  decimal type and `Sum()` over a `DecimalField` can return a float and drift. See ADR-002.
-- **Configuration is data, not code.** Discount ceilings, approval thresholds, warehouse
-  shipping weights and subscription plans are database rows editable in the admin. A number
-  typed into a view is a bug.
-
----
+  decimal type and `Sum()` over a `DecimalField` can drift to float. See ADR-002.
+- **Configuration is data, not code.** A number typed into a view is a bug.
+- **Dates use `timezone.localdate()`, never `timezone.now().date()`** — the latter is UTC,
+  which put the whole app a day behind between 18:30 and midnight IST.
 
 ## Documentation
 
 | File | What it holds |
 |---|---|
-| `CLAUDE.md` | Project identity and development principles |
 | `docs/SPEC.md` | Structured product requirements (MUST / SHOULD / BONUS) |
 | `docs/ARCHITECTURE.md` | Stack, layers, module boundaries |
 | `docs/DATA_MODEL.md` | Entities, relationships, invariants |
+| `docs/DECISIONS.md` | ADR log — 17 decisions, each with the reason and the alternative |
+| `docs/SCALE.md` | Query budgets, what was fixed, what breaks first at scale |
 | `docs/DEMO.md` | The five-minute demo this project must survive |
-| `docs/DECISIONS.md` | ADR log |
+| `docs/NEXT.md` | What is deliberately unbuilt, and why |
 | `tasks/BACKLOG.md` | All tasks, P0 / P1 / P2 |
+
+---
+
+<div align="center">
+
+Built for the **Odoo Hackathon 2026** · solo build
+
+</div>
